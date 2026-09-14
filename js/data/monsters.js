@@ -808,4 +808,14 @@ export const ENCOUNTERS = {
   },
 };
 
+/** 게임 시작 직후 몸풀기용 아주 약한 조우 (1막 1번째 전투) */
+export const OPENING_ENCOUNTERS = [
+  ['acidSlimeS', 'spikeSlimeS'],
+  ['louseRed'],
+  ['louseGreen'],
+  ['jawWorm'],
+  ['acidSlimeS', 'acidSlimeS'],
+  ['spikeSlimeS', 'spikeSlimeS'],
+];
+
 export const GREMLIN_POOL = ['gremlinMad', 'gremlinSneaky', 'gremlinFat', 'gremlinShield', 'gremlinWizard'];

@@ -2,6 +2,7 @@
 //  cnation STS — 메인 컨트롤러
 // ============================================================
 import { $, $$, el, sleep, clamp } from './util.js';
+import { VERSION, VERSION_NOTE } from './version.js';
 import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, ACT_RANGES } from './engine/run.js';
 import { Battle } from './engine/battle.js';
 import { POWERS, powerName, powerDesc } from './engine/powers.js';
@@ -9,11 +10,15 @@ import { CARD_DEFS, Card, mk, TYPE_KR, RARITY_KR } from './data/cards.js';
 import { RELICS, RARITY_KR as RELIC_RARITY_KR } from './data/relics.js';
 import { POTIONS } from './data/potions.js';
 import { EVENTS, pickEvent } from './data/events.js';
+import { CHARACTERS, CHAR_LIST, charOf } from './data/characters.js';
+import { rollNeowOptions } from './data/neow.js';
+import { STANCE_KR } from './engine/battle.js';
 import { MONSTERS } from './data/monsters.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
 import { SFX, unlockAudio, startAmbience, stopAmbience, setSfxEnabled, isSfxEnabled } from './audio.js';
 import * as S3 from './three/scene3d.js';
+import * as M3 from './three/map3d.js';
 
 // ---------------- 전역 상태 ----------------
 const G = {
@@ -28,6 +33,7 @@ const G = {
   pendingPotion: null,
 };
 window.G = G;
+window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-modal'];
 function showScreen(id) {
@@ -62,6 +68,8 @@ function modalText(text) { return el('p', { class: 'modal-text', text }); }
 //  타이틀
 // ============================================================
 function initTitle() {
+  const vb = $('#version-badge');
+  if (vb) vb.innerHTML = `Version <b>${VERSION}</b> · ${VERSION_NOTE}`;
   $('#btn-new').addEventListener('click', () => { unlockAudio(); SFX.tap(); newGame(); });
   $('#btn-continue').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
@@ -76,17 +84,81 @@ function initTitle() {
 }
 
 function newGame() {
-  G.run = new Run();
-  saveRun(G.run);
   startAmbience();
+  showCharacterSelect();
+}
+
+/** 캐릭터 선택 */
+function showCharacterSelect() {
+  openModal((box) => {
+    box.append(modalTitle('캐릭터 선택'));
+    CHAR_LIST.forEach((id) => {
+      const ch = CHARACTERS[id];
+      const row = el('button', { class: 'char-row' });
+      row.style.setProperty('--acc', ch.accent);
+      row.innerHTML = `
+        <div class="char-portrait">${svgIcon(id === 'ironclad' ? 'sword' : id === 'silent' ? 'twinSword' : id === 'defect' ? 'ring' : 'spiral',
+          { size: 30, color: ch.accent })}</div>
+        <div class="char-info">
+          <b>${ch.name}</b><span class="char-tag">${ch.tagline}</span>
+          <small>${ch.desc}</small>
+          <div class="char-stats">체력 ${ch.maxHp} · ${RELICS[ch.relic] ? RELICS[ch.relic].name : ''}</div>
+        </div>`;
+      row.addEventListener('click', () => {
+        SFX.tap();
+        G.run = new Run(undefined, id);
+        saveRun(G.run);
+        closeModal();
+        showNeow();
+      });
+      box.appendChild(row);
+    });
+    box.append(el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn ghost', text: '취소', onclick: () => { SFX.tap(); closeModal(); } })));
+  });
+}
+
+/** 시작 보너스 (네오우의 축복) */
+function showNeow() {
+  const run = G.run;
+  const opts = rollNeowOptions(run.rng);
+  const ctx = {
+    pickCard: async (filter, title) => {
+      const cand = run.deck.filter(filter);
+      if (!cand.length) return null;
+      const [c] = await chooseCardsModal(cand, { count: 1, title });
+      return c;
+    },
+    pickUpgrade: async (filter, title) => pickAndUpgrade(run.deck.filter(filter), title),
+    chooseFrom: async (list, title) => { const [c] = await chooseCardsModal(list, { count: 1, title, virtual: true }); return c; },
+    gainRelic: async (id) => gainRelic(id),
+    relicName: (id) => (RELICS[id] ? RELICS[id].name : '유물'),
+  };
   openModal((box) => {
     box.append(
-      modalTitle('아이언클래드'),
-      el('div', { class: 'relic-big', html: relicIcon(RELICS.burningBlood, 26) }),
-      modalText('첨탑의 1층에서 시작합니다.\n50층 정상의 최종 보스를 쓰러뜨리세요.\n\n17층과 34층의 보스를 처치하면\n체력이 모두 회복된 상태로 다음 막을 시작합니다.'),
-      el('div', { class: 'modal-actions' },
-        el('button', { class: 'btn big gold', text: '첨탑에 오른다', onclick: () => { SFX.tap(); closeModal(); goMap(); } })),
+      modalTitle('시작 보너스'),
+      modalText(`${run.charName}(으)로 첨탑에 오릅니다.\n첫 걸음을 내딛기 전, 하나를 선택하세요.`),
     );
+    opts.forEach((o) => {
+      const row = el('button', { class: 'choice-row' + (o.risky ? ' risky' : '') });
+      row.innerHTML = `<div class="ci">${svgIcon(o.icon, { size: 26, color: o.risky ? '#ff8a6a' : '#e8c34a' })}</div>
+        <div><b>${o.label}</b><small>${o.desc}</small></div>`;
+      row.addEventListener('click', async () => {
+        SFX.relic();
+        closeModal();
+        const msg = await o.apply(run, ctx);
+        saveRun(run);
+        openModal((b2) => {
+          b2.append(
+            modalTitle(run.charName),
+            modalText(`${msg}\n\n1층부터 50층까지 오릅니다.\n17층과 34층의 보스를 처치하면 체력이 모두 회복됩니다.`),
+            el('div', { class: 'modal-actions' },
+              el('button', { class: 'btn big gold', text: '첨탑에 오른다', onclick: () => { SFX.tap(); closeModal(); goMap(); } })),
+          );
+        });
+      });
+      box.appendChild(row);
+    });
   });
 }
 
@@ -190,114 +262,41 @@ function goMap() {
   saveRun(G.run);
 }
 
+const ORB_KR = { lightning: '번개', frost: '냉기', dark: '암흑', plasma: '플라즈마' };
+const ORB_GLYPH = { lightning: 'lightning', frost: 'drop', dark: 'ring', plasma: 'star' };
+
 const ROOM_GLYPH = { monster: 'sword', elite: 'skull', event: 'question', rest: 'flame', shop: 'potion', treasure: 'star', boss: 'crown' };
 const ROOM_COLOR = { monster: '#d0a0a0', elite: '#ff6a5a', event: '#a0d0ff', rest: '#ffa04a', shop: '#8affc0', treasure: '#ffd24a', boss: '#ff5a4a' };
 
-function renderMap() {
-  const run = G.run;
-  const inner = $('#map-inner');
-  inner.innerHTML = '';
-  const avail = run.availableNodes();
-  const availKey = new Set(avail.map((a) => (a.boss ? 'boss' : `${a.row},${a.col}`)));
+const LEGEND = [
+  ['monster', '전투'], ['elite', '정예'], ['event', '의문'],
+  ['rest', '모닥불'], ['shop', '상점'], ['treasure', '보물'], ['boss', '보스'],
+];
 
-  inner.append(el('div', { class: 'map-title', text: `${run.act}막 — ${ACT_RANGES[run.act - 1].start}층 ~ ${ACT_RANGES[run.act - 1].boss}층` }));
-
-  // 보스 (맨 위)
-  const bossRow = el('div', { class: 'map-row', style: { marginBottom: '26px' } });
-  const bossNode = el('div', { class: 'map-node boss' + (availKey.has('boss') ? ' avail' : ''), html: svgIcon('crown', { size: 34, color: '#ff7a5a' }) });
-  if (availKey.has('boss')) bossNode.addEventListener('click', () => enterRoom({ boss: true }));
-  bossRow.appendChild(bossNode);
-  inner.appendChild(bossRow);
-  inner.appendChild(el('div', { class: 'map-title', text: MONSTERS[run.bossEncounter[0]].name, style: { fontSize: '12px', color: '#ff8a7a', marginBottom: '14px' } }));
-
-  // 행 (위에서 아래로 : 마지막 행이 위)
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const rows = [];
-  for (let r = run.map.length - 1; r >= 0; r--) {
-    const rowEl = el('div', { class: 'map-row', style: { marginBottom: '30px' } });
-    run.map[r].forEach((node, ci) => {
-      const isAvail = availKey.has(`${r},${ci}`);
-      const cur = run.mapPos && run.mapPos.row === r && run.mapPos.col === ci;
-      const n = el('div', {
-        class: `map-node${isAvail ? ' avail' : ''}${node.visited ? ' visited' : ''}${cur ? ' current' : ''}`,
-        html: svgIcon(ROOM_GLYPH[node.type], { size: 26, color: ROOM_COLOR[node.type] }),
-      });
-      n.dataset.rc = `${r},${ci}`;
-      if (isAvail) n.addEventListener('click', () => enterRoom({ row: r, col: ci }));
-      rowEl.appendChild(n);
-    });
-    inner.appendChild(rowEl);
-    rows.push(rowEl);
-  }
-  inner.append(el('div', { class: 'map-title', text: '↑ 위로 오르세요', style: { fontSize: '12px', color: '#7a7288' } }));
-
-  // 연결선
-  requestAnimationFrame(() => drawMapLines(inner));
-  const sc = $('#map-scroll');
-  requestAnimationFrame(() => {
-    const nodes = $$('.map-node.avail', inner);
-    const cur = nodes[nodes.length - 1];
-    if (cur) {
-      const top = cur.getBoundingClientRect().top - inner.getBoundingClientRect().top;
-      sc.scrollTop = Math.max(0, top - sc.clientHeight * 0.55);
-    } else sc.scrollTop = sc.scrollHeight;
+function renderLegend() {
+  const box = $('#map-legend');
+  if (!box) return;
+  box.innerHTML = '';
+  LEGEND.forEach(([type, label]) => {
+    const color = ROOM_COLOR[type];
+    box.appendChild(el('div', { class: 'legend-item' },
+      el('i', { class: 'legend-dot', style: { color } }),
+      el('span', { text: label })));
   });
 }
 
-function drawMapLines(inner) {
-  const old = inner.querySelector('svg.map-svg');
-  if (old) old.remove();
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'map-svg');
-  svg.setAttribute('width', inner.clientWidth);
-  svg.setAttribute('height', inner.scrollHeight);
-  svg.setAttribute('viewBox', `0 0 ${inner.clientWidth} ${inner.scrollHeight}`);
-  svg.style.height = inner.scrollHeight + 'px';
-  const base = inner.getBoundingClientRect();
-  const rectOf = (elm) => {
-    const b = elm.getBoundingClientRect();
-    return { x: b.left - base.left + b.width / 2, y: b.top - base.top + b.height / 2 };
-  };
-  const pos = (r, c) => {
-    const n = inner.querySelector(`.map-node[data-rc="${r},${c}"]`);
-    return n ? rectOf(n) : null;
-  };
+function renderMap() {
   const run = G.run;
-  for (let r = 0; r < run.map.length - 1; r++) {
-    run.map[r].forEach((node, ci) => {
-      node.next.forEach((nc) => {
-        const a = pos(r, ci), b = pos(r + 1, nc);
-        if (!a || !b) return;
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const mid = (a.y + b.y) / 2;
-        line.setAttribute('d', `M${a.x} ${a.y} C ${a.x} ${mid}, ${b.x} ${mid}, ${b.x} ${b.y}`);
-        line.setAttribute('stroke', node.visited ? '#5a4a2a' : '#3a3348');
-        line.setAttribute('stroke-width', '2.5');
-        line.setAttribute('fill', 'none');
-        line.setAttribute('stroke-dasharray', '5 5');
-        svg.appendChild(line);
-      });
-    });
+  renderLegend();
+  const canvas = $('#map-canvas');
+  M3.initMap(canvas);
+  M3.resizeMap();
+  M3.buildMap(run, (pos) => enterRoom(pos));
+  const t = $('#map-title-3d');
+  if (t) {
+    const boss = MONSTERS[run.bossEncounter[0]];
+    t.textContent = `${run.act}막 · ${ACT_RANGES[run.act - 1].start}~${ACT_RANGES[run.act - 1].boss}층 · 보스 ${boss ? boss.name : ''}`;
   }
-  // 보스 연결
-  const lastRow = run.map.length - 1;
-  const bossEl = inner.querySelector('.map-node.boss');
-  if (bossEl) {
-    run.map[lastRow].forEach((_, ci) => {
-      const a = pos(lastRow, ci);
-      if (!a) return;
-      const b = rectOf(bossEl);
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      const mid = (a.y + b.y) / 2;
-      line.setAttribute('d', `M${a.x} ${a.y} C ${a.x} ${mid}, ${b.x} ${mid}, ${b.x} ${b.y}`);
-      line.setAttribute('stroke', '#5a2a2a');
-      line.setAttribute('stroke-width', '2.5');
-      line.setAttribute('fill', 'none');
-      line.setAttribute('stroke-dasharray', '5 5');
-      svg.appendChild(line);
-    });
-  }
-  inner.insertBefore(svg, inner.firstChild);
 }
 
 // ---------------- 방 진입 ----------------
@@ -313,7 +312,14 @@ function enterRoom(pos) {
   else if (type === ROOM.REST) showRest();
   else if (type === ROOM.SHOP) showShop();
   else if (type === ROOM.TREASURE) showTreasure();
-  else showEvent();
+  else {
+    // ? 방 : 실제 방 종류를 굴린다 (염주 팔찌 / 작은 상자 반영)
+    const real = run.resolveUnknown();
+    if (real === ROOM.MONSTER) { toast('매복이다!'); startBattle(run.makeEncounter(ROOM.MONSTER)); }
+    else if (real === ROOM.SHOP) showShop();
+    else if (real === ROOM.TREASURE) showTreasure();
+    else showEvent();
+  }
   saveRun(run);
 }
 
@@ -348,6 +354,7 @@ const battleUI = {
   render() { renderBattle(); },
   fx(type, data) { battleFx(type, data); },
   async chooseCards(list, opts) { return chooseCardsModal(list, opts); },
+  async chooseOption(labels, title) { return chooseOptionModal(labels, title); },
   onBattleEnd(B) { setTimeout(() => endBattle(B), 700); },
 };
 
@@ -465,6 +472,22 @@ function renderUnits() {
     if (actor.block > 0) {
       u.appendChild(el('div', { class: 'unit-block', text: String(actor.block) }));
     }
+    if (isPlayer) {
+      if (B.stance && B.stance !== 'neutral') {
+        u.appendChild(el('div', { class: 'stance-badge s-' + B.stance, text: STANCE_KR[B.stance] }));
+      }
+      if (B.orbs && B.orbs.length) {
+        const row = el('div', { class: 'orb-row' });
+        B.orbs.forEach((o) => {
+          const chip = el('div', { class: 'orb o-' + o.type, title: ORB_KR[o.type] });
+          chip.innerHTML = svgIcon(ORB_GLYPH[o.type], { size: 13, color: '#fff' }) +
+            (o.type === 'dark' ? `<span>${o.amount}</span>` : '');
+          row.appendChild(chip);
+        });
+        for (let i = B.orbs.length; i < B.orbSlots; i++) row.appendChild(el('div', { class: 'orb empty' }));
+        u.appendChild(row);
+      }
+    }
     const pw = el('div', { class: 'powers' });
     Object.entries(actor.powers).forEach(([id, n]) => {
       const pd = POWERS[id];
@@ -521,9 +544,9 @@ function renderHand() {
   B.hand.forEach((card, i) => {
     const c = renderCard(card);
     const t = n === 1 ? 0.5 : i / (n - 1);
-    const spread = Math.min(w - cw - 28, Math.max(0, (n - 1) * cw * 0.86));
+    const spread = Math.min(w - cw - 42, Math.max(0, (n - 1) * cw * 0.86));
     const x = w / 2 + (t - 0.5) * spread - cw / 2;
-    const ang = n === 1 ? 0 : (t - 0.5) * Math.min(16, n * 3);
+    const ang = n === 1 ? 0 : (t - 0.5) * Math.min(13, n * 2.2);
     const y = -Math.cos((t - 0.5) * Math.PI) * Math.min(10, n * 1.6) + 8;
     c.style.left = x + 'px';
     c.style.transform = `translateY(${y}px) rotate(${ang}deg)`;
@@ -675,6 +698,20 @@ function showPile(title, cards, sorted = false) {
   });
 }
 
+function chooseOptionModal(labels, title) {
+  return new Promise((resolve) => {
+    openModal((box) => {
+      box.append(modalTitle(title || '선택'));
+      labels.forEach((lb, i) => {
+        const row = el('button', { class: 'choice-row' });
+        row.innerHTML = `<div><b>${lb}</b></div>`;
+        row.addEventListener('click', () => { SFX.tap(); closeModal(); resolve(i); });
+        box.appendChild(row);
+      });
+    });
+  });
+}
+
 // ---------------- 카드 선택 모달 ----------------
 function chooseCardsModal(list, opts = {}) {
   return new Promise((resolve) => {
@@ -752,6 +789,54 @@ async function gainRelic(id) {
   return true;
 }
 
+
+// ---------------- 강화 미리보기 / 확인 ----------------
+/** 강화 전-후를 비교해 보여주고 확인을 받는다. */
+function showUpgradePreview(card) {
+  return new Promise((resolve) => {
+    const after = card.copy();
+    after.upgrade();
+    const diff = [];
+    const label = { cost: '비용', dmg: '피해', blk: '방어도', mag: '수치', hits: '횟수' };
+    ['cost', 'dmg', 'blk', 'mag', 'hits'].forEach((k) => {
+      const a = card.v(k), b = after.v(k);
+      if (a !== undefined && b !== undefined && a !== b) diff.push(`${label[k]} ${a} → ${b}`);
+    });
+    if (!card.exhaust && after.exhaust) diff.push('소각 추가');
+    if (card.exhaust && !after.exhaust) diff.push('소각 제거');
+    if (!card.innate && after.innate) diff.push('내재 추가');
+    if (!card.retain && after.retain) diff.push('보존 추가');
+    if (card.ethereal && !after.ethereal) diff.push('소멸 제거');
+    if (!diff.length) diff.push('효과가 강화됩니다');
+
+    openModal((box) => {
+      box.append(modalTitle('강화하시겠습니까?'));
+      const row = el('div', { class: 'upgrade-compare' });
+      const left = el('div', { class: 'uc-side' }, renderCardBig(card), el('span', { class: 'uc-label', text: '현재' }));
+      const arrow = el('div', { class: 'uc-arrow', html: svgIcon('arrowUp', { size: 26, color: '#7cff9a' }) });
+      const right = el('div', { class: 'uc-side' }, renderCardBig(after), el('span', { class: 'uc-label up', text: '강화 후' }));
+      row.append(left, arrow, right);
+      box.append(row);
+      box.append(el('div', { class: 'uc-diff', html: diff.map((d) => `<span>${d}</span>`).join('') }));
+      box.append(el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn gold', text: '강화한다', onclick: () => { SFX.upgrade(); closeModal(); resolve(true); } }),
+        el('button', { class: 'btn ghost', text: '다시 고르기', onclick: () => { SFX.tap(); closeModal(); resolve(false); } })));
+    });
+  });
+}
+
+/** 카드를 고르고 → 미리보기 확인 → 강화. 취소하면 null */
+async function pickAndUpgrade(cands, title = '강화할 카드 선택') {
+  if (!cands.length) { toast('강화할 카드가 없습니다.'); return null; }
+  for (let guard = 0; guard < 30; guard++) {
+    const [c] = await chooseCardsModal(cands, { count: 1, title, optional: true });
+    if (!c) return null;
+    const ok = await showUpgradePreview(c);
+    if (ok) { c.upgrade(); return c; }
+  }
+  return null;
+}
+
 // ============================================================
 //  전투 종료 & 보상
 // ============================================================
@@ -765,6 +850,7 @@ function endBattle(B) {
   if (kind === 'elite') run.stats.elites++;
   if (kind === 'boss') run.stats.bosses++;
   run.relicHook('onBattleEnd', run, B);
+  if (B.selfRepair) run.healPlayer(B.selfRepair);
   // 훔쳐간 골드 회수
   B.enemies.forEach((e) => { if (e.stolenGold && !e.alive && !e.fled) run.gainGold(e.stolenGold); });
 
@@ -918,10 +1004,8 @@ function showRest() {
     icon: 'hammer', color: '#8ad0ff', label: '대장간',
     desc: '카드 1장을 강화합니다.',
     act: async () => {
-      const cand = run.deck.filter((c) => c.canUpgrade());
-      if (!cand.length) { toast('강화할 카드가 없습니다.'); return; }
-      const [c] = await chooseCardsModal(cand, { count: 1, title: '강화할 카드' });
-      if (c) { c.upgrade(); SFX.upgrade(); run.flags.teaSet = true; finishRest(`${c.name} 강화 완료!`); }
+      const c = await pickAndUpgrade(run.deck.filter((x) => x.canUpgrade()), '강화할 카드 선택');
+      if (c) { run.flags.teaSet = true; finishRest(`${c.name} 강화 완료!`); }
     },
   });
   if (run.hasRelic('peacePipe')) opts.push({
@@ -1115,6 +1199,7 @@ function showEvent() {
       const [c] = await chooseCardsModal(cand, { count: 1, title });
       return c;
     },
+    pickUpgrade: async (filter, title) => pickAndUpgrade(run.deck.filter(filter), title),
     chooseFrom: async (list, title) => {
       const [c] = await chooseCardsModal(list, { count: 1, title, virtual: true });
       return c;
@@ -1283,7 +1368,7 @@ function bind() {
   addEventListener('resize', () => {
     S3.resize();
     if (G.battle) renderBattle();
-    if (G.run && !$('#scr-map').hidden) requestAnimationFrame(() => drawMapLines($('#map-inner')));
+    if (G.run && !$('#scr-map').hidden) { M3.resizeMap(); }
   });
   addEventListener('visibilitychange', () => { if (document.hidden && G.run) saveRun(G.run); });
 }

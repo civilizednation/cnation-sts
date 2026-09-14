@@ -4,9 +4,10 @@
 import { RNG } from '../util.js';
 import '../data/cards.js';
 import { Card, CARD_DEFS, mk, pool } from '../data/carddb.js';
-import { RELICS, RELIC_POOLS } from '../data/relics.js';
+import { RELICS, RELIC_POOLS, relicAllowed } from '../data/relics.js';
+import { CHARACTERS, charOf } from '../data/characters.js';
 import { POTIONS, POTION_POOL } from '../data/potions.js';
-import { ENCOUNTERS, MONSTERS } from '../data/monsters.js';
+import { ENCOUNTERS, MONSTERS, OPENING_ENCOUNTERS } from '../data/monsters.js';
 import { Actor } from './battle.js';
 import { CURSE_POOL } from '../data/cards_colorless.js';
 
@@ -27,27 +28,28 @@ export const ROOM_KR = {
   shop: '상점', treasure: '보물', boss: '보스',
 };
 
-/** 아이언클래드 시작 덱 */
-function starterDeck() {
+/** 캐릭터별 시작 덱 */
+function starterDeck(ch) {
   const d = [];
-  for (let i = 0; i < 5; i++) d.push(mk('strike_r'));
-  for (let i = 0; i < 4; i++) d.push(mk('defend_r'));
-  d.push(mk('bash'));
+  ch.deck.forEach(([id, n]) => { for (let i = 0; i < n; i++) d.push(mk(id)); });
   return d;
 }
 
 export class Run {
-  constructor(seed) {
+  constructor(seed, charId = 'ironclad') {
     this.seed = seed || Math.floor(Math.random() * 1e9);
     this.rng = new RNG(this.seed);
-    this.charColor = 'red';
-    this.charName = '아이언클래드';
-    this.player = new Actor({ name: '아이언클래드', maxHp: 80, hp: 80, isPlayer: true });
-    this.deck = starterDeck();
-    this.relics = [{ id: 'burningBlood', counter: 0 }];
+    const ch = charOf(charId);
+    this.character = ch;
+    this.charId = ch.id;
+    this.charColor = ch.color;
+    this.charName = ch.name;
+    this.player = new Actor({ name: ch.name, maxHp: ch.maxHp, hp: ch.maxHp, isPlayer: true });
+    this.deck = starterDeck(ch);
+    this.relics = [{ id: ch.relic, counter: RELICS[ch.relic] && RELICS[ch.relic].counter !== undefined ? RELICS[ch.relic].counter : 0 }];
     this.potions = [null, null, null];
     this.potionSlots = 3;
-    this.gold = 99;
+    this.gold = ch.gold;
     this.floor = 1;
     this.act = 1;
     this.flags = {};
@@ -55,6 +57,7 @@ export class Run {
     this.potionChance = 40;
     this.monsterQueue = [];
     this.eliteQueue = [];
+    this.unknownChance = { monster: 10, shop: 3, treasure: 2 };
     this.usedEvents = [];
     this.stats = { kills: 0, elites: 0, bosses: 0, damageTaken: 0, floorsClimbed: 0 };
     this.buildAct(1);
@@ -207,13 +210,38 @@ export class Run {
     return this.rng.weighted(w).t;
   }
 
+  /** ? 방에 들어갔을 때 실제 방 종류를 결정 (원작의 누적 확률 방식) */
+  resolveUnknown() {
+    // 작은 상자 : 4번째 ? 방마다 보물 방
+    const tc = this.relicObj('tinyChest');
+    if (tc) {
+      tc.counter = (tc.counter || 0) + 1;
+      if (tc.counter % 4 === 0) return ROOM.TREASURE;
+    }
+    const c = this.unknownChance;
+    const r = this.rng.next() * 100;
+    // 염주 팔찌 : 일반 전투가 나타나지 않음
+    const mon = this.hasRelic('juzuBracelet') ? 0 : c.monster;
+    if (r < mon) { c.monster = 10; return ROOM.MONSTER; }
+    if (r < mon + c.shop) { c.shop = 3; return ROOM.SHOP; }
+    if (r < mon + c.shop + c.treasure) { c.treasure = 2; return ROOM.TREASURE; }
+    c.monster += 10; c.shop += 3; c.treasure += 2;
+    return ROOM.EVENT;
+  }
+
   /** 현재 선택 가능한 노드들 */
   availableNodes() {
     if (!this.map) return [];
     if (this.mapPos === null) return this.map[0].map((n, i) => ({ row: 0, col: i }));
     const { row, col } = this.mapPos;
     if (row >= this.map.length - 1) return [{ row: -1, col: -1, boss: true }];
-    return this.map[row][col].next.map((c) => ({ row: row + 1, col: c }));
+    const linked = this.map[row][col].next;
+    const wb = this.relicObj('wingBoots');
+    if (wb && wb.counter > 0) {
+      // 날개 부츠 : 경로를 무시하고 다음 행의 아무 방이나 선택 가능
+      return this.map[row + 1].map((n, i) => ({ row: row + 1, col: i, fly: !linked.includes(i) }));
+    }
+    return linked.map((c) => ({ row: row + 1, col: c }));
   }
   nodeAt(pos) {
     if (!pos || pos.boss) return { type: ROOM.BOSS };
@@ -222,6 +250,10 @@ export class Run {
 
   /** 노드 진입 */
   enterNode(pos) {
+    if (pos.fly) {
+      const wb = this.relicObj('wingBoots');
+      if (wb && wb.counter > 0) wb.counter--;
+    }
     this.mapPos = pos.boss ? { row: this.map.length, col: 0, boss: true } : pos;
     this.floor = pos.boss ? this.actInfo.boss : this.actInfo.start + pos.row;
     this.stats.floorsClimbed++;
@@ -240,14 +272,23 @@ export class Run {
     this.monsterCount++;
     const weakCount = this.act === 1 ? 3 : 2;
     let list;
-    if (this.monsterCount <= weakCount) {
+    let tuning = null;
+    // 1막 초반 2번의 전투는 몸풀기용으로 약하게 조정한다
+    if (this.act === 1 && this.monsterCount === 1) {
+      list = this.rng.pick(OPENING_ENCOUNTERS);
+      tuning = { hp: 0.55, dmg: 0.5, label: '몸풀기' };
+    } else if (this.act === 1 && this.monsterCount === 2) {
+      if (!this.monsterQueue.length) this.monsterQueue = this.rng.shuffle(ENCOUNTERS[this.act].weak.slice());
+      list = this.monsterQueue.pop();
+      tuning = { hp: 0.75, dmg: 0.7, label: '약함' };
+    } else if (this.monsterCount <= weakCount) {
       if (!this.monsterQueue.length) this.monsterQueue = this.rng.shuffle(ENCOUNTERS[this.act].weak.slice());
       list = this.monsterQueue.pop();
     } else {
       if (!this.strongQueue.length) this.strongQueue = this.rng.shuffle(ENCOUNTERS[this.act].strong.slice());
       list = this.strongQueue.pop();
     }
-    return { kind: 'normal', monsters: list.slice() };
+    return { kind: 'normal', monsters: list.slice(), tuning };
   }
 
   // ---------------- 보상 ----------------
@@ -321,13 +362,14 @@ export class Run {
     let idx = order.indexOf(rarity);
     for (let k = 0; k < order.length; k++) {
       const rar = order[(idx + k) % order.length];
-      const avail = (RELIC_POOLS[rar] || []).filter((id) => !this.hasRelic(id) && !this.blockedRelic(id));
+      const avail = (RELIC_POOLS[rar] || []).filter((id) =>
+        !this.hasRelic(id) && !this.blockedRelic(id) && relicAllowed(id, this.charColor));
       if (avail.length) return this.rng.pick(avail);
     }
     return null;
   }
   blockedRelic(id) {
-    if (id === 'blackBlood') return false;
+    if (id === 'blackBlood') return this.charColor !== 'red';
     if (id === 'bottledFlame' || id === 'bottledLightning' || id === 'bottledTornado') {
       const t = { bottledFlame: 'attack', bottledLightning: 'skill', bottledTornado: 'power' }[id];
       return !this.deck.some((c) => c.type === t);
@@ -336,7 +378,7 @@ export class Run {
   }
 
   bossRelicChoices() {
-    const avail = RELIC_POOLS.boss.filter((id) => !this.hasRelic(id));
+    const avail = RELIC_POOLS.boss.filter((id) => !this.hasRelic(id) && relicAllowed(id, this.charColor));
     return this.rng.shuffle(avail).slice(0, 3);
   }
 
@@ -355,7 +397,7 @@ export class Run {
   // ---------------- 저장 / 불러오기 ----------------
   toJSON() {
     return {
-      seed: this.seed, rngSeed: this.rng.seed, act: this.act, floor: this.floor,
+      seed: this.seed, charId: this.charId, rngSeed: this.rng.seed, act: this.act, floor: this.floor,
       hp: this.player.hp, maxHp: this.player.maxHp, gold: this.gold,
       deck: this.deck.map((c) => c.toJSON()),
       relics: this.relics, potions: this.potions, potionSlots: this.potionSlots,
@@ -363,12 +405,12 @@ export class Run {
       mapPos: this.mapPos, flags: this.flags, stats: this.stats,
       monsterCount: this.monsterCount, cardRarityBonus: this.cardRarityBonus,
       potionChance: this.potionChance, bossEncounter: this.bossEncounter,
-      usedEvents: this.usedEvents,
+      usedEvents: this.usedEvents, unknownChance: this.unknownChance,
     };
   }
 
   static fromJSON(o) {
-    const r = new Run(o.seed);
+    const r = new Run(o.seed, o.charId || 'ironclad');
     r.rng.seed = o.rngSeed;
     r.act = o.act; r.floor = o.floor;
     r.actInfo = ACT_RANGES[r.act - 1];
@@ -383,6 +425,7 @@ export class Run {
     r.potionChance = o.potionChance === undefined ? 40 : o.potionChance;
     r.bossEncounter = o.bossEncounter;
     r.usedEvents = o.usedEvents || [];
+    r.unknownChance = o.unknownChance || { monster: 10, shop: 3, treasure: 2 };
     r.monsterQueue = r.rng.shuffle(ENCOUNTERS[r.act].weak.slice());
     r.strongQueue = r.rng.shuffle(ENCOUNTERS[r.act].strong.slice());
     r.eliteQueue = r.rng.shuffle(ENCOUNTERS[r.act].elite.slice());

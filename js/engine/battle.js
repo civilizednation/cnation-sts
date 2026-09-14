@@ -19,6 +19,7 @@ export class Actor {
 }
 
 const A = TYPE.ATTACK, S = TYPE.SKILL, P = TYPE.POWER;
+export const STANCE_KR = { neutral: '무자세', wrath: '분노', calm: '평온', divinity: '신성' };
 
 export class Battle {
   constructor(run, encounter, ui) {
@@ -34,10 +35,18 @@ export class Battle {
     this.over = false; this.won = false; this.escaped = false;
     this.cardsPlayedThisTurn = 0; this.cardsPlayedThisCombat = 0;
     this.panacheCount = 0;
+    this.powersPlayed = 0;
     this.prideQueue = [];
     this.bombs = [];
     this.penNibActive = false;
     this.hpLostThisCombat = 0;
+    // 디펙트 : 구체
+    this.channeledCount = { lightning: 0, frost: 0, dark: 0, plasma: 0 };
+    this.orbs = [];
+    this.orbSlots = run.character && run.character.orbSlots ? run.character.orbSlots : 3;
+    // 와쳐 : 자세
+    this.stance = 'neutral';
+    this.firstCardThisTurn = true;
     this.awaitingInput = false;
     this.spawnEnemies(encounter.monsters);
   }
@@ -55,6 +64,7 @@ export class Battle {
   addEnemy(mid, idx) {
     const d = MONSTERS[mid];
     let hp = this.rng.range(d.hp[0], d.hp[1]);
+    if (this.encounter.tuning && this.encounter.tuning.hp) hp = Math.max(1, Math.round(hp * this.encounter.tuning.hp));
     if (this.encounter.kind === 'elite' && this.run.hasRelic('preservedInsect')) hp = Math.ceil(hp * 0.75);
     const e = new Actor({
       name: d.name, en: d.en, mid, maxHp: hp, hp, idx: idx !== undefined ? idx : this.enemies.length,
@@ -93,6 +103,9 @@ export class Battle {
       }
     }
 
+    let amt = amount;
+    if (id === 'poison' && amount > 0 && source && source.isPlayer) amt += this.pow(this.player, 'deadlyPoison');
+    amount = amt;
     const cur = this.pow(target, id);
     const singleton = pdef && pdef.stack === 'none';
     target.powers[id] = singleton ? 1 : cur + amount;
@@ -131,11 +144,18 @@ export class Battle {
       d += this.pow(src, 'vigor');
       if (card && this.run.hasRelic('strikeDummy') && card.def.en.includes('Strike')) d += 3;
     }
+    if (src.isPlayer) {
+      if (this.stance === 'wrath') d *= 2;
+      else if (this.stance === 'divinity') d *= 3;
+      if (this.pow(src, 'doubleDamage') > 0) d *= 2;
+    }
+    if (dst.isPlayer && this.stance === 'wrath') d *= 2;
     if (this.pow(src, 'weak') > 0) d *= 0.75;
-    if (this.pow(dst, 'vulnerable') > 0) d *= 1.5;
+    if (this.pow(dst, 'vulnerable') > 0) d *= (!dst.isPlayer && this.run.hasRelic('paperPhrog')) ? 1.75 : 1.5;
     if (this.pow(dst, 'flight') > 0) d *= 0.5;
     if (src.isPlayer && this.penNibActive) d *= 2;
     if (dst.isPlayer && this.pow(dst, 'slow') > 0) d *= 1 + this.pow(dst, 'slow') * 0.1;
+    if (!src.isPlayer && this.encounter.tuning && this.encounter.tuning.dmg) d *= this.encounter.tuning.dmg;
     d = Math.floor(d);
     if (src.isPlayer && this.run.hasRelic('theBoot') && d > 0 && d < 5) d = 5;
     return Math.max(0, d);
@@ -175,6 +195,11 @@ export class Battle {
         this.hpLostThisCombat += dmg;
         this.ui.sfx && this.ui.sfx('hurt');
         this.onPlayerHpLost(dmg);
+        this.tookDamageThisTurn = true;
+        if (kind === 'attack') {
+          const sd = this.pow(dst, 'staticDischarge');
+          if (sd > 0) this.channel('lightning', sd);
+        }
       }
       if (dst.hp <= 0) this.killEnemy(dst, src);
     } else {
@@ -264,6 +289,14 @@ export class Battle {
     this.ui.sfx && this.ui.sfx(base >= 15 ? 'bash' : 'slash');
     const dealt = this.applyDamage(src, dst, val, card, 'attack');
     if (src.isPlayer) {
+      const br = this.pow(dst, 'blockReturn');
+      if (br > 0) this.gainBlock(src, br, null, true);
+    }
+    if (src.isPlayer && dealt > 0) {
+      const env = this.pow(src, 'envenom');
+      if (env > 0) this.addPower(dst, 'poison', env, src);
+    }
+    if (src.isPlayer) {
       // 활력 / 펜촉 소모
       if (this.pow(src, 'vigor') > 0) this.removePower(src, 'vigor');
       if (this.penNibActive) { this.penNibActive = false; const r = this.run.relicObj('penNib'); if (r) r.counter = 0; }
@@ -303,6 +336,10 @@ export class Battle {
     actor.block += v;
     this.fx('block', { actor, amount: v });
     this.ui.sfx && this.ui.sfx('block');
+    if (actor.isPlayer) {
+      const woh = this.pow(actor, 'waveOfTheHand');
+      if (woh > 0) this.living().forEach((e) => this.addPower(e, 'weak', woh, actor));
+    }
     // 파쇄차
     const jug = this.pow(actor, 'juggernaut');
     if (jug > 0 && actor.isPlayer) {
@@ -352,6 +389,17 @@ export class Battle {
     this.fx('die', { actor: a });
     this.ui.sfx && this.ui.sfx('enemyDie');
     this.log(`${a.name} 처치!`);
+    // 표본 : 남은 중독을 다른 적에게 전이
+    if (this.run.hasRelic('theSpecimen')) {
+      const ps = this.pow(a, 'poison');
+      const others = this.living().filter((e) => e !== a);
+      if (ps > 0 && others.length) this.addPower(this.rng.pick(others), 'poison', ps, this.player, true);
+    }
+    // 시체 폭발
+    if (this.pow(a, 'corpseExplosion') > 0) {
+      const ps = this.pow(a, 'poison');
+      if (ps > 0) this.living().forEach((e) => this.dealDamage(this.player, e, ps, null, 'power'));
+    }
     // 포자 구름
     const sp = this.pow(a, 'spore');
     if (sp > 0) this.addPower(this.player, 'vulnerable', sp, a);
@@ -514,9 +562,10 @@ export class Battle {
     this.render();
   }
 
-  discardFromHand(c) {
+  discardFromHand(c, byPlayer = true) {
     if (!this.removeFrom(this.hand, c)) return;
     this.discardPile.push(c);
+    if (byPlayer) this.discardedThisTurn++;
     if (c.def.onDiscard) c.def.onDiscard(this, c);
     this.render();
   }
@@ -549,6 +598,11 @@ export class Battle {
     const pool = Object.values(CARD_DEFS).filter((d) => d.color === 'colorless' && !d.noPool);
     return pool.length ? new Card(this.rng.pick(pool).id) : null;
   }
+  randomCommonCard() {
+    const pool = Object.values(CARD_DEFS).filter((d) => d.rarity === 'common' && !d.noPool &&
+      (d.color === this.run.charColor || d.color === 'colorless'));
+    return pool.length ? new Card(this.rng.pick(pool).id) : null;
+  }
   randomCardAny() {
     const pool = Object.values(CARD_DEFS).filter((d) => !d.noPool &&
       (d.color === this.run.charColor || d.color === 'colorless'));
@@ -560,12 +614,151 @@ export class Battle {
     return this.rng.shuffle(pool).slice(0, n).map((d) => new Card(d.id));
   }
 
+  /** 전투 중 얻은 영구 보너스를 실제 덱 카드에 반영 (유전 알고리즘) */
+  permanentBonus(card) {
+    if (!card.srcUid) return;
+    const src = this.run.deck.find((c) => c.uid === card.srcUid);
+    if (src) src.bonusDmg = card.bonusDmg;
+  }
   upgradeAllBurns() {
     this.allCombatCards().forEach((c) => { if (c.id === 'burn' && !c.upgraded) c.upgrade(); });
   }
   addBomb(dmg) { this.bombs.push({ turns: 3, dmg }); this.addPower(this.player, 'bomb', 3, this.player, true); }
 
   async chooseCards(list, opts) { return this.ui.chooseCards(list, opts); }
+
+
+  // ================= 카드 생성 (현실 조작 반영) =================
+  newCard(id, up = false) {
+    const c = mk(id, up);
+    if (this.pow(this.player, 'masterReality') > 0 && c.canUpgrade()) c.upgrade();
+    return c;
+  }
+  /** 단검 n장을 손에 (사일런트) */
+  addShivs(n) { for (let i = 0; i < n; i++) this.addCardToHand(this.newCard('shiv')); }
+
+  // ================= 구체 (디펙트) =================
+  get focus() { return this.pow(this.player, 'focus'); }
+
+  channel(type, n = 1) {
+    for (let i = 0; i < n; i++) {
+      if (this.orbs.length >= this.orbSlots) this.evoke(1);
+      this.orbs.push({ type, amount: type === 'dark' ? 6 + this.focus : 0 });
+      this.channeledCount[type] = (this.channeledCount[type] || 0) + 1;
+      this.fx('orb', { type, action: 'channel' });
+      this.ui.sfx && this.ui.sfx('energy');
+    }
+    this.render();
+  }
+  /** 맨 앞 구체를 times 번 발동하고 제거 */
+  evokeFront(times = 1) {
+    const orb = this.orbs.shift();
+    if (!orb) return;
+    for (let i = 0; i < times; i++) this.orbEffect(orb, true);
+    this.fx('orb', { type: orb.type, action: 'evoke' });
+    this.render();
+  }
+  /** 맨 앞 구체 발동 후 제거 */
+  evoke(n = 1, keep = false) {
+    for (let i = 0; i < n; i++) {
+      const orb = keep ? this.orbs[0] : this.orbs.shift();
+      if (!orb) return;
+      this.orbEffect(orb, true);
+      this.fx('orb', { type: orb.type, action: 'evoke' });
+    }
+    this.render();
+  }
+  evokeAll(times = 1) {
+    const list = this.orbs.slice();
+    this.orbs = [];
+    for (let t = 0; t < times; t++) list.forEach((o) => this.orbEffect(o, true));
+    this.render();
+  }
+  /** 구체 효과 (evoke=true 면 발동, false 면 패시브) */
+  orbEffect(orb, evokeIt) {
+    const f = this.focus;
+    const living = this.living();
+    switch (orb.type) {
+      case 'lightning': {
+        const dmg = (evokeIt ? 8 : 3) + f;
+        if (!living.length) break;
+        if (this.pow(this.player, 'electro') > 0) living.forEach((e) => this.orbDamage(e, dmg));
+        else this.orbDamage(this.rng.pick(living), dmg);
+        break;
+      }
+      case 'frost':
+        this.gainBlock(this.player, (evokeIt ? 5 : 2) + f, null, true);
+        break;
+      case 'dark':
+        if (evokeIt) {
+          const t = living.slice().sort((a, b) => a.hp - b.hp)[0];
+          if (t) this.orbDamage(t, orb.amount);
+        } else orb.amount += 6 + f;
+        break;
+      case 'plasma':
+        this.gainEnergy(evokeIt ? 2 : 1);
+        break;
+    }
+  }
+  orbDamage(target, amount) {
+    let d = amount;
+    if (this.pow(target, 'lockOn') > 0) d = Math.floor(d * 1.5);
+    this.fx('orbHit', { dst: target, amount: d });
+    this.applyDamage(this.player, target, d, null, 'orb');
+  }
+  /** 턴 종료 시 구체 패시브 */
+  orbPassives() {
+    this.orbs.slice().forEach((o) => this.orbEffect(o, false));
+    this.render();
+  }
+  removeOrb(i = 0) { this.orbs.splice(i, 1); this.render(); }
+
+  // ================= 자세 (와쳐) =================
+  setStance(next) {
+    if (this.stance === next) return;
+    const prev = this.stance;
+    if (prev === 'calm') this.gainEnergy(this.run.hasRelic('violetLotus') ? 3 : 2);
+    this.stance = next;
+    if (next === 'divinity') this.gainEnergy(3);
+    if (next === 'wrath') {
+      const rd = this.pow(this.player, 'rushdown');
+      if (rd > 0) this.draw(rd);
+    }
+    const mf = this.pow(this.player, 'mentalFortress');
+    if (mf > 0) this.gainBlock(this.player, mf, null, true);
+    this.discardPile.filter((c) => c.id === 'flurryOfBlows').slice(0, Math.max(0, 10 - this.hand.length)).forEach((c) => {
+      this.removeFrom(this.discardPile, c); this.addCardToHand(c);
+    });
+    this.fx('stance', { stance: next, prev });
+    this.ui.sfx && this.ui.sfx(next === 'wrath' ? 'fire' : next === 'divinity' ? 'relic' : 'buff');
+    this.log(`자세 : ${STANCE_KR[next]}`);
+    this.render();
+  }
+  addMantra(n) {
+    if (n <= 0) return;
+    this.totalMantra = (this.totalMantra || 0) + n;
+    this.addPower(this.player, 'mantra', n, this.player);
+    while (this.pow(this.player, 'mantra') >= 10) {
+      this.addPower(this.player, 'mantra', -10, this.player, true);
+      this.setStance('divinity');
+    }
+  }
+
+  // ================= 통찰 (Scry) =================
+  async scry(n) {
+    if (n <= 0) return;
+    if (this.drawPile.length < n) this.shuffleDiscardIntoDraw();
+    const top = this.drawPile.slice(-n).reverse();
+    if (!top.length) return;
+    const sel = await this.chooseCards(top, { count: top.length, title: `통찰 — 버릴 카드 선택 (${top.length}장)`, optional: true });
+    (sel || []).forEach((c) => { this.removeFrom(this.drawPile, c); this.discardPile.push(c); });
+    this.discardPile.filter((c) => c.id === 'weave').slice(0, Math.max(0, 10 - this.hand.length)).forEach((c) => {
+      this.removeFrom(this.discardPile, c); this.addCardToHand(c);
+    });
+    const nir = this.pow(this.player, 'nirvana');
+    if (nir > 0) this.gainBlock(this.player, nir, null);
+    this.render();
+  }
 
   // ---------------- 의도(Intent) ----------------
   rollIntent(e) {
@@ -632,6 +825,9 @@ export class Battle {
   handSize() {
     let n = 5;
     if (this.run.hasRelic('sneckoEye')) n += 2;
+    n += this.pow(this.player, 'machineLearning');
+    const ntd = this.pow(this.player, 'nextTurnDraw');
+    if (ntd > 0) { n += ntd; this.removePower(this.player, 'nextTurnDraw'); }
     const dr = this.pow(this.player, 'drawReduction');
     if (dr > 0) n -= dr;
     if (this.extraDraw) { n += this.extraDraw; this.extraDraw = 0; }
@@ -644,9 +840,13 @@ export class Battle {
     this.playerTurn = true;
     this.cardsPlayedThisTurn = 0;
     this.attacksThisTurn = 0;
+    this.firstCardThisTurn = true;
+    this.discardedThisTurn = 0;
 
     // 방어도 처리
-    if (this.pow(this.player, 'barricade') <= 0) {
+    if (this.pow(this.player, 'blur') > 0) {
+      this.addPower(this.player, 'blur', -1, null, true);
+    } else if (this.pow(this.player, 'barricade') <= 0) {
       if (this.run.hasRelic('calipers')) this.player.block = Math.max(0, this.player.block - 15);
       else this.player.block = 0;
     }
@@ -664,6 +864,34 @@ export class Battle {
 
     // 카드 뽑기
     this.draw(this.handSize());
+
+    const nte = this.pow(this.player, 'nextTurnEnergy');
+    if (nte > 0) { this.gainEnergy(nte); this.removePower(this.player, 'nextTurnEnergy'); }
+
+    // 도박 칩 : 전투 첫 턴에 원하는 만큼 버리고 같은 수만큼 다시 뽑는다
+    if (this.turn === 1 && this.run.hasRelic('gamblingChip') && this.hand.length) {
+      const sel = await this.chooseCards(this.hand.slice(), {
+        count: this.hand.length, title: '도박 칩 — 버릴 카드 선택', optional: true });
+      if (sel && sel.length) { sel.forEach((c) => this.discardFromHand(c)); this.draw(sel.length); }
+    }
+
+    const fs = this.pow(this.player, 'foresight');
+    if (fs > 0) await this.scry(fs);
+
+    // 악몽 : 지정한 카드의 복사본 3장
+    if (this.nightmareCard) {
+      for (let i = 0; i < 3; i++) this.addCardToHand(this.nightmareCard.copy());
+      this.nightmareCard = null;
+    }
+    // 도구 사용 : 뽑고 버리기
+    const tot = this.pow(this.player, 'toolsOfTheTrade');
+    for (let i = 0; i < tot; i++) {
+      this.draw(1);
+      if (this.hand.length) {
+        const sel = await this.chooseCards(this.hand.slice(), { count: 1, title: '도구 사용 — 버릴 카드' });
+        if (sel && sel[0]) this.discardFromHand(sel[0]);
+      }
+    }
 
     // 대혼란 / 자성
     const may = this.pow(this.player, 'mayhem');
@@ -685,6 +913,34 @@ export class Battle {
       this.addPower(a, 'poison', -1, null, true);
     }
     if (a.isPlayer) {
+      // 와쳐
+      const dev = this.pow(a, 'devotion');
+      if (dev > 0) this.addMantra(dev);
+      const col = this.pow(a, 'collect');
+      if (col > 0) { this.addCardToHand(mk('miracle', true)); this.addPower(a, 'collect', -1, a, true); }
+      const bh = this.pow(a, 'battleHymn');
+      for (let i = 0; i < bh; i++) this.addCardToHand(this.newCard('smite'));
+      if (this.pow(a, 'wrathNext') > 0) { this.removePower(a, 'wrathNext'); this.setStance('wrath'); }
+      const dv = this.pow(a, 'devaForm');
+      if (dv > 0) { this.gainEnergy(dv); this.addPower(a, 'devaForm', 1, a, true); }
+      // 사일런트
+      const ib = this.pow(a, 'infiniteBlades');
+      if (ib > 0) this.addShivs(ib);
+      const nf = this.pow(a, 'noxiousFumes');
+      if (nf > 0) this.living().forEach((e) => this.addPower(e, 'poison', nf, a));
+      // 디펙트
+      if (this.run.hasRelic('emotionChip') && this.tookDamageLastTurn && this.orbs.length) {
+        this.log('감정 칩 작동!');
+        this.evokeAll();
+      }
+      this.tookDamageLastTurn = this.tookDamageThisTurn;
+      this.tookDamageThisTurn = false;
+      const loop = this.pow(a, 'loop');
+      if (loop > 0 && this.orbs[0]) for (let i = 0; i < loop; i++) this.orbEffect(this.orbs[0], false);
+      const cai = this.pow(a, 'creativeAI');
+      for (let i = 0; i < cai; i++) { const c = this.randomCardOfType(P); if (c) this.addCardToHand(c); }
+      const hw = this.pow(a, 'helloWorld');
+      for (let i = 0; i < hw; i++) { const c = this.randomCommonCard(); if (c) this.addCardToHand(c); }
       const df = this.pow(a, 'demonForm');
       if (df > 0) this.addPower(a, 'strength', df, a);
       const br = this.pow(a, 'brutality');
@@ -693,6 +949,8 @@ export class Battle {
       if (bs > 0) this.gainEnergy(bs);
       const bias = this.pow(a, 'bias');
       if (bias > 0) this.addPower(a, 'dexterity', -bias, a);
+      const bc = this.pow(a, 'biasedCognition');
+      if (bc > 0) this.addPower(a, 'focus', -bc, a);
       // 폭탄
       if (this.bombs.length) {
         this.bombs.forEach((b) => { b.turns--; });
@@ -727,6 +985,19 @@ export class Battle {
       if (con > 0) this.dealDamage(a, a, con, null, 'power');
       const ntb = this.pow(a, 'nextTurnBlock');
       if (ntb > 0) { this.removePower(a, 'nextTurnBlock'); this.pendingBlock = ntb; }
+      // 와쳐
+      if (this.stance === 'calm') {
+        const lw = this.pow(a, 'likeWater');
+        if (lw > 0) this.gainBlock(a, lw, null, true);
+      }
+      const st = this.pow(a, 'study');
+      for (let i = 0; i < st; i++) this.addCardToDrawRandom(this.newCard('insight'));
+      const om = this.pow(a, 'omega');
+      if (om > 0) this.living().forEach((e) => this.dealDamage(a, e, om, null, 'power'));
+      if (this.stance === 'divinity') this.setStance('neutral');
+      if (this.pow(a, 'blasphemer') > 0) { this.log('신성모독의 대가...'); a.hp = 0; this.playerDeathCheck(); }
+      // 디펙트 : 구체 패시브
+      if (this.orbs.length) this.orbPassives();
     } else {
       const met = this.pow(a, 'metallicize');
       if (met > 0) this.gainBlock(a, met, null, true);
@@ -738,6 +1009,8 @@ export class Battle {
     // 힘 감소/회복 예정
     const ls = this.pow(a, 'loseStrength');
     if (ls > 0) { this.addPower(a, 'strength', -ls, a, true); this.removePower(a, 'loseStrength'); }
+    const ld = this.pow(a, 'loseDexterityEOT');
+    if (ld > 0) { this.addPower(a, 'dexterity', -ld, a, true); this.removePower(a, 'loseDexterityEOT'); }
     const gs = this.pow(a, 'gainStrengthEOT');
     if (gs > 0) { this.addPower(a, 'strength', gs, a, true); this.removePower(a, 'gainStrengthEOT'); }
 
@@ -760,7 +1033,12 @@ export class Battle {
   costOf(card) {
     if (card.freeOnce) return 0;
     let c = card.cost;
+    if (card.id === 'eviscerate') c = Math.max(0, c - (this.discardedThisTurn || 0));
+    if (card.id === 'forceField') c = Math.max(0, c - (this.powersPlayed || 0));
     if (card.type === S && this.pow(this.player, 'corruption') > 0) c = 0;
+    if (card.type === A && this.pow(this.player, 'freeAttack') > 0) c = 0;
+    if (card.type === S && this.pow(this.player, 'freeSkill') > 0) c = 0;
+    if (card.retain) c = Math.max(0, c - this.pow(this.player, 'establishment'));
     return c;
   }
 
@@ -787,6 +1065,8 @@ export class Battle {
     if (card.isXCost) { x = this.energy; this.energy = 0; }
     else this.energy -= cost;
     if (card.freeOnce) card.freeOnce = false;
+    if (card.type === A && this.pow(this.player, 'freeAttack') > 0) this.addPower(this.player, 'freeAttack', -1, null, true);
+    if (card.type === S && this.pow(this.player, 'freeSkill') > 0) this.addPower(this.player, 'freeSkill', -1, null, true);
 
     this.removeFrom(this.hand, card);
     this.cardInPlay = card;
@@ -805,6 +1085,9 @@ export class Battle {
 
     let times = 1;
     if (card.type === A && this.pow(this.player, 'doubleTap') > 0) { times = 2; this.addPower(this.player, 'doubleTap', -1, null, true); }
+    if (card.type === S && this.pow(this.player, 'burst') > 0) { times = 2; this.addPower(this.player, 'burst', -1, null, true); }
+    if (card.type === P && this.pow(this.player, 'amplify') > 0) { times = 2; this.addPower(this.player, 'amplify', -1, null, true); }
+    if (this.firstCardThisTurn && this.pow(this.player, 'echoForm') > 0) times = Math.max(times, 2);
     if (this.pow(this.player, 'duplication') > 0) { times = Math.max(times, 2); this.addPower(this.player, 'duplication', -1, null, true); }
 
     for (let i = 0; i < times; i++) {
@@ -823,6 +1106,8 @@ export class Battle {
     const corrupted = card.type === S && this.pow(this.player, 'corruption') > 0;
     if (card.exhaust || corrupted) this.exhaustCard(card);
     else if (card.type === P) { /* 힘 카드는 사라짐 */ }
+    else if (this.tantrumShuffle === card) { this.tantrumShuffle = null; this.addCardToDrawRandom(card); }
+    else if (this.reboundNext && card.id !== 'rebound') { this.reboundNext = false; this.drawPile.push(card); }
     else this.discardPile.push(card);
 
     this.playing = false;
@@ -835,6 +1120,8 @@ export class Battle {
   afterCardPlayed(card) {
     this.cardsPlayedThisTurn++;
     this.cardsPlayedThisCombat++;
+    if (card.type === P) this.powersPlayed++;
+    this.lastCardType = card.type;
     // 고통 저주
     if (this.hand.some((c) => c.id === 'pain')) this.loseHp(this.player, 1, null);
     // 저주(Hex)
@@ -873,6 +1160,23 @@ export class Battle {
 
     });
     if (this.player.powers.slow !== undefined) this.player.powers.slow++;
+    this.living().forEach((e) => {
+      const ch = this.pow(e, 'choke');
+      if (ch > 0) this.loseHp(e, ch, null);
+    });
+    // 사일런트
+    const tc = this.pow(this.player, 'thousandCuts');
+    if (tc > 0) this.living().forEach((e) => this.dealDamage(this.player, e, tc, null, 'power'));
+    const ai = this.pow(this.player, 'afterImage');
+    if (ai > 0) this.gainBlock(this.player, ai, null);
+    // 디펙트
+    if (card.type === P) {
+      const storm = this.pow(this.player, 'storm');
+      if (storm > 0) this.channel('lightning', storm);
+      const hs = this.pow(this.player, 'heatsinks');
+      if (hs > 0) this.draw(hs);
+    }
+    this.firstCardThisTurn = false;
     // 유물
     this.run.relicHook('onCardPlayed', this, card);
     // 끊임없는 팽이
@@ -916,9 +1220,16 @@ export class Battle {
     }
     // 손패 버리기
     if (!this.run.hasRelic('runicPyramid')) {
+      const keep = this.pow(this.player, 'wellLaidPlans');
+      let kept = 0;
       for (const c of [...this.hand]) {
-        if (c.retain) continue;
-        this.discardFromHand(c);
+        if (c.retain || c.retainOnce) {
+          c.retainOnce = false;
+          if (c.def.onRetain) c.def.onRetain(this, c);
+          continue;
+        }
+        if (kept < keep) { kept++; continue; }
+        this.discardFromHand(c, false);
       }
     }
     // 회중시계
@@ -931,6 +1242,12 @@ export class Battle {
     this.render();
     await this.wait(250);
 
+    if (this.extraTurn) {
+      this.extraTurn = false;
+      this.log('추가 턴!');
+      await this.startPlayerTurn();
+      return;
+    }
     await this.enemyTurn();
     if (this.checkEnd()) return this.finish();
     await this.startPlayerTurn();

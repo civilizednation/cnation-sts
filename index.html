@@ -27,6 +27,7 @@
     <div class="title-wrap">
       <h1 class="game-title"><span>SLAY</span><em>the</em><span>SPIRE</span></h1>
       <p class="title-sub">cnation 모바일 에디션 · 전 50층</p>
+      <div class="version-badge" id="version-badge"></div>
       <div class="title-menu">
         <button class="btn big" id="btn-new">새 게임</button>
         <button class="btn big ghost" id="btn-continue">이어하기</button>
@@ -39,7 +40,12 @@
   <!-- ============ 지도 ============ -->
   <section class="screen" id="scr-map" hidden>
     <header class="topbar" id="map-top"></header>
-    <div class="map-scroll" id="map-scroll"><div class="map-inner" id="map-inner"></div></div>
+    <div class="map-legend" id="map-legend"></div>
+    <div class="map3d-wrap">
+      <canvas id="map-canvas"></canvas>
+      <div class="map-title-3d" id="map-title-3d"></div>
+      <div class="map-hint" id="map-hint">위아래로 밀어 둘러보고, 빛나는 방을 탭하세요</div>
+    </div>
     <footer class="mapfoot">
       <div class="potion-row" id="map-potion-row"></div>
       <button class="btn sm" id="btn-deck">덱 보기</button>

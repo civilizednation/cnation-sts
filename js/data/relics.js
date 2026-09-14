@@ -368,10 +368,69 @@ RELICS.sneckoEye = RELICS['snecko Eye'];
 RELICS.sneckoEye.id = 'sneckoEye';
 delete RELICS['snecko Eye'];
 
+
+// ---------------- 캐릭터 시작 유물 ----------------
+R({ id: 'ringOfTheSnake', name: '뱀의 반지', en: 'Ring of the Snake', rarity: 'starter', glyph: 'ring',
+  desc: '전투 시작 시 카드를 2장 더 뽑습니다.',
+  onFirstTurn: (B) => B.draw(2) });
+
+R({ id: 'crackedCore', name: '금 간 핵', en: 'Cracked Core', rarity: 'starter', glyph: 'ring',
+  desc: '전투 시작 시 번개 구체를 1개 충전합니다.',
+  onBattleStart: (B) => B.channel('lightning') });
+
+R({ id: 'pureWater', name: '순수한 물', en: 'Pure Water', rarity: 'starter', glyph: 'potion',
+  desc: '전투 시작 시 기적 카드 1장을 손에 넣습니다.',
+  onFirstTurn: (B) => B.addCardToHand(B.newCard('miracle')) });
+
+// ---------------- 사일런트 전용 ----------------
+R({ id: 'twistedFunnel', name: '뒤틀린 깔때기', en: 'Twisted Funnel', rarity: 'boss', char: 'green', glyph: 'drop',
+  desc: '전투 시작 시 모든 적에게 중독을 4 부여합니다.',
+  onBattleStart: (B) => B.living().forEach((e) => B.addPower(e, 'poison', 4, B.player)) });
+R({ id: 'ninjaScroll', name: '닌자 두루마리', en: 'Ninja Scroll', rarity: 'boss', char: 'green', glyph: 'scroll',
+  desc: '전투 시작 시 단검 3장을 손에 넣습니다.',
+  onFirstTurn: (B) => B.addShivs(3) });
+R({ id: 'paperPhrog', name: '종이 개구리', en: 'Paper Phrog', rarity: 'uncommon', char: 'green', glyph: 'charm',
+  desc: '취약 상태의 적이 받는 피해가 75%로 증가합니다.' });
+R({ id: 'theSpecimen', name: '표본', en: 'The Specimen', rarity: 'rare', char: 'green', glyph: 'insect',
+  desc: '적이 죽을 때 남은 중독이 다른 적에게 옮겨갑니다.' });
+
+// ---------------- 디펙트 전용 ----------------
+R({ id: 'dataDisk', name: '자료 디스크', en: 'Data Disk', rarity: 'common', char: 'blue', glyph: 'ring',
+  desc: '전투 시작 시 집중을 1 얻습니다.',
+  onBattleStart: (B) => B.addPower(B.player, 'focus', 1, B.player) });
+R({ id: 'goldPlatedCables', name: '금도금 케이블', en: 'Gold-Plated Cables', rarity: 'boss', char: 'blue', glyph: 'kunai',
+  desc: '가장 앞의 구체가 패시브를 2번 발동합니다.',
+  onBattleStart: (B) => B.addPower(B.player, 'loop', 1, B.player, true) });
+R({ id: 'emotionChip', name: '감정 칩', en: 'Emotion Chip', rarity: 'rare', char: 'blue', glyph: 'gear',
+  desc: '피해를 받은 다음 턴 시작 시 모든 구체를 발동합니다.' });
+R({ id: 'runicCapacitor', name: '룬 축전기', en: 'Runic Capacitor', rarity: 'boss', char: 'blue', glyph: 'ring',
+  desc: '구체 슬롯이 3 증가합니다.' });
+
+// ---------------- 와쳐 전용 ----------------
+R({ id: 'damaru', name: '다마루', en: 'Damaru', rarity: 'common', char: 'purple', glyph: 'ring',
+  desc: '턴이 시작될 때마다 주문을 1 얻습니다.',
+  onTurnStart: (B) => B.addMantra(1) });
+R({ id: 'violetLotus', name: '보라 연꽃', en: 'Violet Lotus', rarity: 'boss', char: 'purple', glyph: 'flower',
+  desc: '평온 자세에서 나올 때 에너지를 1 더 얻습니다.' });
+R({ id: 'teardropLocket', name: '눈물 로켓', en: 'Teardrop Locket', rarity: 'rare', char: 'purple', glyph: 'charm',
+  desc: '전투를 평온 자세로 시작합니다.',
+  onBattleStart: (B) => B.setStance('calm') });
+R({ id: 'duality', name: '이원성', en: 'Duality', rarity: 'uncommon', char: 'purple', glyph: 'twinSword',
+  desc: '공격 카드를 사용할 때마다 이번 턴 동안 민첩을 1 얻습니다.',
+  onCardPlayed: (B, c) => { if (c.type === 'attack') { B.addPower(B.player, 'dexterity', 1, B.player); B.addPower(B.player, 'loseDexterityEOT', 1, B.player, true); } } });
+
 export const RELIC_POOLS = {
   common: Object.values(RELICS).filter((r) => r.rarity === 'common').map((r) => r.id),
   uncommon: Object.values(RELICS).filter((r) => r.rarity === 'uncommon').map((r) => r.id),
   rare: Object.values(RELICS).filter((r) => r.rarity === 'rare').map((r) => r.id),
   boss: Object.values(RELICS).filter((r) => r.rarity === 'boss').map((r) => r.id),
+};
+
+/** 해당 캐릭터가 얻을 수 있는 유물인지 */
+export const relicAllowed = (id, charColor) => {
+  const d = RELICS[id];
+  if (!d) return false;
+  if (d.rarity === 'starter' || d.rarity === 'starter2') return false;
+  return !d.char || d.char === charColor;
 };
 export const relic = (id) => RELICS[id];

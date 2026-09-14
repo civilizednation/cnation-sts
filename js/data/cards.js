@@ -3,6 +3,9 @@
 // ============================================================
 import './cards_ironclad.js';
 import './cards_colorless.js';
+import './cards_silent.js';
+import './cards_defect.js';
+import './cards_watcher.js';
 
 export * from './carddb.js';
 export { CURSE_POOL, STATUS_IDS } from './cards_colorless.js';
