@@ -1,0 +1,403 @@
+// ============================================================
+//  런(Run) 진행 : 지도 생성 / 방 처리 / 보상 / 저장
+// ============================================================
+import { RNG } from '../util.js';
+import '../data/cards.js';
+import { Card, CARD_DEFS, mk, pool } from '../data/carddb.js';
+import { RELICS, RELIC_POOLS } from '../data/relics.js';
+import { POTIONS, POTION_POOL } from '../data/potions.js';
+import { ENCOUNTERS, MONSTERS } from '../data/monsters.js';
+import { Actor } from './battle.js';
+import { CURSE_POOL } from '../data/cards_colorless.js';
+
+// 총 50층 : 1막 1~17(보스 17) / 2막 18~34(보스 34) / 3막 35~50(보스 50)
+export const ACT_RANGES = [
+  { act: 1, start: 1, rows: 16, boss: 17 },
+  { act: 2, start: 18, rows: 16, boss: 34 },
+  { act: 3, start: 35, rows: 15, boss: 50 },
+];
+
+export const ROOM = {
+  MONSTER: 'monster', ELITE: 'elite', EVENT: 'event',
+  REST: 'rest', SHOP: 'shop', TREASURE: 'treasure', BOSS: 'boss',
+};
+
+export const ROOM_KR = {
+  monster: '전투', elite: '정예', event: '의문', rest: '모닥불',
+  shop: '상점', treasure: '보물', boss: '보스',
+};
+
+/** 아이언클래드 시작 덱 */
+function starterDeck() {
+  const d = [];
+  for (let i = 0; i < 5; i++) d.push(mk('strike_r'));
+  for (let i = 0; i < 4; i++) d.push(mk('defend_r'));
+  d.push(mk('bash'));
+  return d;
+}
+
+export class Run {
+  constructor(seed) {
+    this.seed = seed || Math.floor(Math.random() * 1e9);
+    this.rng = new RNG(this.seed);
+    this.charColor = 'red';
+    this.charName = '아이언클래드';
+    this.player = new Actor({ name: '아이언클래드', maxHp: 80, hp: 80, isPlayer: true });
+    this.deck = starterDeck();
+    this.relics = [{ id: 'burningBlood', counter: 0 }];
+    this.potions = [null, null, null];
+    this.potionSlots = 3;
+    this.gold = 99;
+    this.floor = 0;
+    this.act = 1;
+    this.flags = {};
+    this.cardRarityBonus = 0;   // 희귀 카드 등장 보정
+    this.potionChance = 40;
+    this.monsterQueue = [];
+    this.eliteQueue = [];
+    this.usedEvents = [];
+    this.stats = { kills: 0, elites: 0, bosses: 0, damageTaken: 0, floorsClimbed: 0 };
+    this.buildAct(1);
+  }
+
+  // ---------------- 유물 ----------------
+  hasRelic(id) { return this.relics.some((r) => r.id === id); }
+  relicObj(id) { return this.relics.find((r) => r.id === id); }
+  addRelic(id) {
+    if (this.hasRelic(id)) return false;
+    const d = RELICS[id];
+    if (!d) return false;
+    const r = { id, counter: d.counter !== undefined ? d.counter : 0 };
+    // 검은 피는 작열하는 피를 대체
+    if (id === 'blackBlood') this.relics = this.relics.filter((x) => x.id !== 'burningBlood');
+    this.relics.push(r);
+    if (d.onEquip) d.onEquip(this, r);
+    if (id === 'potionBelt') { /* onEquip 에서 처리 */ }
+    return true;
+  }
+  relicHook(name, ...args) {
+    for (const r of [...this.relics]) {
+      const d = RELICS[r.id];
+      if (d && d[name]) d[name](...args, r);
+    }
+  }
+  energyBonus(kind) {
+    let e = 0;
+    this.relics.forEach((r) => { if (RELICS[r.id] && RELICS[r.id].energy) e += RELICS[r.id].energy; });
+    if (this.hasRelic('slaversCollar') && (kind === 'elite' || kind === 'boss')) e += 1;
+    return e;
+  }
+
+  // ---------------- 체력 / 골드 ----------------
+  healPlayer(n) { this.player.hp = Math.min(this.player.maxHp, this.player.hp + n); }
+  gainMaxHp(n) { this.player.maxHp += n; this.player.hp += n; }
+  loseMaxHp(n) { this.player.maxHp = Math.max(1, this.player.maxHp - n); this.player.hp = Math.min(this.player.hp, this.player.maxHp); }
+  gainGold(n) { if (this.hasRelic('ectoplasm')) return; this.gold += n; }
+  spendGold(n) { this.gold = Math.max(0, this.gold - n); this.relicHook('onSpendGold', this); }
+
+  // ---------------- 덱 조작 ----------------
+  addCard(card) {
+    // 알 유물 : 획득 시 강화
+    if (card.type === 'attack' && this.hasRelic('moltenEgg')) card.upgrade();
+    if (card.type === 'skill' && this.hasRelic('toxicEgg')) card.upgrade();
+    if (card.type === 'power' && this.hasRelic('frozenEgg')) card.upgrade();
+    this.deck.push(card);
+    this.relicHook('onObtainCard', this, card);
+    if (card.type === 'curse') this.relicHook('onObtainCurse', this, card);
+    return card;
+  }
+  addCurse(id) {
+    if (this.hasRelic('omamori')) {
+      const r = this.relicObj('omamori');
+      if (r.counter > 0) { r.counter--; return null; }
+    }
+    return this.addCard(mk(id));
+  }
+  removeCard(card) {
+    const i = this.deck.findIndex((c) => c.uid === card.uid);
+    if (i >= 0) {
+      if (card.id === 'parasite') this.loseMaxHp(3);
+      this.deck.splice(i, 1);
+    }
+  }
+  upgradeRandom(filter, n) {
+    const cand = this.rng.shuffle(this.deck.filter((c) => c.canUpgrade() && filter(c)));
+    cand.slice(0, n).forEach((c) => c.upgrade());
+  }
+
+  // ---------------- 물약 ----------------
+  potionSpace() { return this.potions.slice(0, this.potionSlots).some((p) => p === null || p === undefined); }
+  addPotion(id) {
+    if (this.hasRelic('sozu')) return false;
+    for (let i = 0; i < this.potionSlots; i++) {
+      if (!this.potions[i]) { this.potions[i] = { id }; return true; }
+    }
+    return false;
+  }
+  fillPotions() {
+    for (let i = 0; i < this.potionSlots; i++) {
+      if (!this.potions[i]) this.potions[i] = { id: this.randomPotion() };
+    }
+  }
+  randomPotion() {
+    const roll = this.rng.next();
+    const rar = roll < 0.65 ? 'common' : roll < 0.9 ? 'uncommon' : 'rare';
+    const list = POTION_POOL.filter((p) => p.rarity === rar);
+    return this.rng.pick(list.length ? list : POTION_POOL).id;
+  }
+
+  // ---------------- 지도 생성 ----------------
+  buildAct(act) {
+    this.act = act;
+    const info = ACT_RANGES[act - 1];
+    this.actInfo = info;
+    this.map = this.generateMap(info);
+    this.mapPos = null; // {row, col}
+    this.monsterCount = 0;
+    this.monsterQueue = this.rng.shuffle(ENCOUNTERS[act].weak.slice());
+    this.strongQueue = this.rng.shuffle(ENCOUNTERS[act].strong.slice());
+    this.eliteQueue = this.rng.shuffle(ENCOUNTERS[act].elite.slice());
+    this.bossEncounter = this.rng.pick(ENCOUNTERS[act].boss);
+  }
+
+  generateMap(info) {
+    const rows = info.rows;
+    const map = [];
+    for (let r = 0; r < rows; r++) {
+      const n = r === 0 ? 3 : this.rng.range(2, 4);
+      const nodes = [];
+      for (let c = 0; c < n; c++) {
+        nodes.push({ row: r, col: c, type: this.pickRoomType(r, rows), next: [], visited: false });
+      }
+      map.push(nodes);
+    }
+    // 연결 : 각 노드는 다음 행의 1~2개 노드와 연결
+    for (let r = 0; r < rows - 1; r++) {
+      const cur = map[r], nxt = map[r + 1];
+      cur.forEach((node, i) => {
+        const ratio = cur.length === 1 ? 0.5 : i / (cur.length - 1);
+        let base = Math.round(ratio * (nxt.length - 1));
+        const links = new Set([base]);
+        if (this.rng.chance(0.45)) links.add(Math.max(0, Math.min(nxt.length - 1, base + (this.rng.chance(0.5) ? 1 : -1))));
+        links.forEach((k) => node.next.push(k));
+      });
+      // 도달 불가 노드 방지
+      nxt.forEach((_, j) => {
+        if (!cur.some((node) => node.next.includes(j))) {
+          const pick = cur[Math.min(cur.length - 1, Math.round((j / Math.max(1, nxt.length - 1)) * (cur.length - 1)))];
+          pick.next.push(j);
+        }
+      });
+    }
+    return map;
+  }
+
+  pickRoomType(r, rows) {
+    if (r === 0) return ROOM.MONSTER;
+    if (r === 1) return this.rng.chance(0.5) ? ROOM.MONSTER : ROOM.EVENT;
+    if (r === Math.floor(rows / 2)) return ROOM.TREASURE;
+    if (r === rows - 1) return ROOM.REST;
+    const w = [
+      { w: 45, t: ROOM.MONSTER },
+      { w: 22, t: ROOM.EVENT },
+      { w: r >= 4 ? 16 : 0, t: ROOM.ELITE },
+      { w: 12, t: ROOM.REST },
+      { w: 5, t: ROOM.SHOP },
+    ];
+    return this.rng.weighted(w).t;
+  }
+
+  /** 현재 선택 가능한 노드들 */
+  availableNodes() {
+    if (!this.map) return [];
+    if (this.mapPos === null) return this.map[0].map((n, i) => ({ row: 0, col: i }));
+    const { row, col } = this.mapPos;
+    if (row >= this.map.length - 1) return [{ row: -1, col: -1, boss: true }];
+    return this.map[row][col].next.map((c) => ({ row: row + 1, col: c }));
+  }
+  nodeAt(pos) {
+    if (!pos || pos.boss) return { type: ROOM.BOSS };
+    return this.map[pos.row][pos.col];
+  }
+
+  /** 노드 진입 */
+  enterNode(pos) {
+    this.mapPos = pos.boss ? { row: this.map.length, col: 0, boss: true } : pos;
+    this.floor = pos.boss ? this.actInfo.boss : this.actInfo.start + pos.row;
+    this.stats.floorsClimbed++;
+    this.relicHook('onClimb', this);
+    if (!pos.boss) this.map[pos.row][pos.col].visited = true;
+    return pos.boss ? { type: ROOM.BOSS } : this.map[pos.row][pos.col];
+  }
+
+  // ---------------- 조우 생성 ----------------
+  makeEncounter(type) {
+    if (type === ROOM.BOSS) return { kind: 'boss', monsters: this.bossEncounter.slice() };
+    if (type === ROOM.ELITE) {
+      if (!this.eliteQueue.length) this.eliteQueue = this.rng.shuffle(ENCOUNTERS[this.act].elite.slice());
+      return { kind: 'elite', monsters: this.eliteQueue.pop().slice() };
+    }
+    this.monsterCount++;
+    const weakCount = this.act === 1 ? 3 : 2;
+    let list;
+    if (this.monsterCount <= weakCount) {
+      if (!this.monsterQueue.length) this.monsterQueue = this.rng.shuffle(ENCOUNTERS[this.act].weak.slice());
+      list = this.monsterQueue.pop();
+    } else {
+      if (!this.strongQueue.length) this.strongQueue = this.rng.shuffle(ENCOUNTERS[this.act].strong.slice());
+      list = this.strongQueue.pop();
+    }
+    return { kind: 'normal', monsters: list.slice() };
+  }
+
+  // ---------------- 보상 ----------------
+  goldReward(kind) {
+    if (kind === 'boss') return this.rng.range(95, 105);
+    if (kind === 'elite') return this.rng.range(25, 35);
+    return this.rng.range(10, 20);
+  }
+
+  cardRewardCount(kind) {
+    let n = 3;
+    if (this.hasRelic('questionCard')) n++;
+    if (this.hasRelic('bustedCrown')) n -= 2;
+    if (this.hasRelic('prayerWheel') && kind === 'normal') n++;
+    return Math.max(1, n);
+  }
+
+  rollCardRarity(kind) {
+    let r = this.rng.next() * 100 + this.cardRarityBonus;
+    if (kind === 'elite') r += 10;
+    if (r > 96) { this.cardRarityBonus = -5; return 'rare'; }
+    if (r > 60) return 'uncommon';
+    this.cardRarityBonus = Math.min(40, this.cardRarityBonus + 1);
+    return 'common';
+  }
+
+  cardReward(kind = 'normal') {
+    const n = this.cardRewardCount(kind);
+    const out = [];
+    const used = new Set();
+    let guard = 0;
+    while (out.length < n && guard++ < 100) {
+      const rar = this.rollCardRarity(kind);
+      const list = Object.values(CARD_DEFS).filter((d) =>
+        (d.color === this.charColor) && d.rarity === rar && !d.noPool && !used.has(d.id));
+      if (!list.length) continue;
+      const d = this.rng.pick(list);
+      used.add(d.id);
+      const c = new Card(d.id);
+      // 획득 시 강화 확률 (1막 0%, 2막 12.5%, 3막 25%)
+      const upChance = this.act === 1 ? 0 : this.act === 2 ? 0.125 : 0.25;
+      if (this.rng.chance(upChance) && c.canUpgrade()) c.upgrade();
+      out.push(c);
+    }
+    return out;
+  }
+
+  colorlessReward(rarity) {
+    const list = Object.values(CARD_DEFS).filter((d) => d.color === 'colorless' && d.rarity === rarity && !d.noPool);
+    return list.length ? new Card(this.rng.pick(list).id) : null;
+  }
+
+  rollPotionDrop() {
+    if (this.hasRelic('whiteBeastStatue')) return true;
+    const ok = this.rng.next() * 100 < this.potionChance;
+    this.potionChance += ok ? -10 : 10;
+    this.potionChance = Math.max(0, Math.min(100, this.potionChance));
+    return ok;
+  }
+
+  relicReward(forcedRarity) {
+    const rar = forcedRarity || (() => {
+      const r = this.rng.next();
+      return r < 0.5 ? 'common' : r < 0.83 ? 'uncommon' : 'rare';
+    })();
+    return this.pickRelic(rar);
+  }
+
+  pickRelic(rarity) {
+    const order = ['common', 'uncommon', 'rare', 'boss'];
+    let idx = order.indexOf(rarity);
+    for (let k = 0; k < order.length; k++) {
+      const rar = order[(idx + k) % order.length];
+      const avail = (RELIC_POOLS[rar] || []).filter((id) => !this.hasRelic(id) && !this.blockedRelic(id));
+      if (avail.length) return this.rng.pick(avail);
+    }
+    return null;
+  }
+  blockedRelic(id) {
+    if (id === 'blackBlood') return false;
+    if (id === 'bottledFlame' || id === 'bottledLightning' || id === 'bottledTornado') {
+      const t = { bottledFlame: 'attack', bottledLightning: 'skill', bottledTornado: 'power' }[id];
+      return !this.deck.some((c) => c.type === t);
+    }
+    return false;
+  }
+
+  bossRelicChoices() {
+    const avail = RELIC_POOLS.boss.filter((id) => !this.hasRelic(id));
+    return this.rng.shuffle(avail).slice(0, 3);
+  }
+
+  // ---------------- 막 전환 ----------------
+  /** 보스 처치 후 : 원작 규칙대로 다음 막은 체력을 모두 회복한 상태로 시작 */
+  advanceAct() {
+    if (this.act >= 3) return false;
+    this.buildAct(this.act + 1);
+    this.player.hp = this.player.maxHp;   // 중간 보스 클리어 → 체력 완전 회복
+    return true;
+  }
+
+  isFinalBossDone() { return this.act === 3 && this.floor >= 50 && this.finished; }
+
+  // ---------------- 저장 / 불러오기 ----------------
+  toJSON() {
+    return {
+      seed: this.seed, rngSeed: this.rng.seed, act: this.act, floor: this.floor,
+      hp: this.player.hp, maxHp: this.player.maxHp, gold: this.gold,
+      deck: this.deck.map((c) => c.toJSON()),
+      relics: this.relics, potions: this.potions, potionSlots: this.potionSlots,
+      map: this.map.map((row) => row.map((n) => ({ t: n.type, x: n.next, v: n.visited }))),
+      mapPos: this.mapPos, flags: this.flags, stats: this.stats,
+      monsterCount: this.monsterCount, cardRarityBonus: this.cardRarityBonus,
+      potionChance: this.potionChance, bossEncounter: this.bossEncounter,
+      usedEvents: this.usedEvents,
+    };
+  }
+
+  static fromJSON(o) {
+    const r = new Run(o.seed);
+    r.rng.seed = o.rngSeed;
+    r.act = o.act; r.floor = o.floor;
+    r.actInfo = ACT_RANGES[r.act - 1];
+    r.player.hp = o.hp; r.player.maxHp = o.maxHp;
+    r.gold = o.gold;
+    r.deck = o.deck.map((c) => Card.fromJSON(c));
+    r.relics = o.relics; r.potions = o.potions; r.potionSlots = o.potionSlots;
+    r.map = o.map.map((row, ri) => row.map((n, ci) => ({ row: ri, col: ci, type: n.t, next: n.x, visited: n.v })));
+    r.mapPos = o.mapPos; r.flags = o.flags || {}; r.stats = o.stats || r.stats;
+    r.monsterCount = o.monsterCount || 0;
+    r.cardRarityBonus = o.cardRarityBonus || 0;
+    r.potionChance = o.potionChance === undefined ? 40 : o.potionChance;
+    r.bossEncounter = o.bossEncounter;
+    r.usedEvents = o.usedEvents || [];
+    r.monsterQueue = r.rng.shuffle(ENCOUNTERS[r.act].weak.slice());
+    r.strongQueue = r.rng.shuffle(ENCOUNTERS[r.act].strong.slice());
+    r.eliteQueue = r.rng.shuffle(ENCOUNTERS[r.act].elite.slice());
+    return r;
+  }
+}
+
+export const SAVE_KEY = 'cnation_sts_save_v1';
+export function saveRun(run) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(run.toJSON())); } catch (e) { console.warn('저장 실패', e); }
+}
+export function loadRun() {
+  try {
+    const s = localStorage.getItem(SAVE_KEY);
+    if (!s) return null;
+    return Run.fromJSON(JSON.parse(s));
+  } catch (e) { console.warn('불러오기 실패', e); return null; }
+}
+export function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }

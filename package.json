@@ -1,0 +1,12 @@
+{
+  "name": "cnation-sts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "cnation Slay the Spire — 모바일 세로형 로그라이크 덱빌더 (HTML/CSS/SVG + three.js)",
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes serve . -l 5173",
+    "start": "npx --yes serve . -l 5173"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0910">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="cnation Slay the Spire - 모바일 로그라이크 덱빌더">
+<title>cnation STS — 첨탑을 오르다</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="app">
+  <!-- ============ 타이틀 ============ -->
+  <section class="screen" id="scr-title">
+    <div class="title-bg"></div>
+    <div class="title-wrap">
+      <h1 class="game-title"><span>SLAY</span><em>the</em><span>SPIRE</span></h1>
+      <p class="title-sub">cnation 모바일 에디션 · 전 50층</p>
+      <div class="title-menu">
+        <button class="btn big" id="btn-new">새 게임</button>
+        <button class="btn big ghost" id="btn-continue">이어하기</button>
+        <button class="btn ghost" id="btn-help">게임 방법</button>
+      </div>
+      <div class="title-foot">원작 규칙 재현 · 아이언클래드 75종 카드 · 몬스터 57종</div>
+    </div>
+  </section>
+
+  <!-- ============ 지도 ============ -->
+  <section class="screen" id="scr-map" hidden>
+    <header class="topbar" id="map-top"></header>
+    <div class="map-scroll" id="map-scroll"><div class="map-inner" id="map-inner"></div></div>
+    <footer class="mapfoot">
+      <button class="btn sm" id="btn-deck">덱 보기</button>
+      <button class="btn sm ghost" id="btn-settings">설정</button>
+    </footer>
+  </section>
+
+  <!-- ============ 전투 ============ -->
+  <section class="screen" id="scr-battle" hidden>
+    <header class="topbar" id="battle-top"></header>
+    <div class="stage">
+      <canvas id="three-canvas"></canvas>
+      <div class="overlay" id="stage-overlay"></div>
+      <div class="float-layer" id="float-layer"></div>
+      <div class="battle-log" id="battle-log"></div>
+    </div>
+    <div class="handbar">
+      <div class="hand-side left">
+        <button class="pile-btn" id="btn-draw"><span class="pile-label">뽑을</span><span class="pile-num" id="draw-count">0</span></button>
+      </div>
+      <div class="hand" id="hand"></div>
+      <div class="hand-side right">
+        <button class="pile-btn" id="btn-discard"><span class="pile-label">버린</span><span class="pile-num" id="discard-count">0</span></button>
+        <button class="pile-btn" id="btn-exhaust"><span class="pile-label">소각</span><span class="pile-num" id="exhaust-count">0</span></button>
+      </div>
+    </div>
+    <div class="actionbar">
+      <div class="energy-orb" id="energy-orb">
+        <svg viewBox="0 0 60 60"><defs>
+          <radialGradient id="eo" cx="0.4" cy="0.35" r="0.75">
+            <stop offset="0" stop-color="#fff6c8"/><stop offset="0.45" stop-color="#ffb13a"/><stop offset="1" stop-color="#7a3a08"/>
+          </radialGradient></defs>
+          <circle cx="30" cy="30" r="26" fill="url(#eo)" stroke="#20140a" stroke-width="3"/>
+          <circle cx="30" cy="30" r="20" fill="none" stroke="#fff0b0" stroke-opacity="0.35" stroke-width="1.5"/>
+        </svg>
+        <span id="energy-text">3/3</span>
+      </div>
+      <div class="potion-row" id="potion-row"></div>
+      <button class="btn end-turn" id="btn-endturn">턴 종료</button>
+    </div>
+  </section>
+
+  <!-- ============ 범용 모달/오버레이 화면 ============ -->
+  <section class="screen modal-screen" id="scr-modal" hidden>
+    <div class="modal-box" id="modal-box"></div>
+  </section>
+
+  <div class="toast-layer" id="toast-layer"></div>
+  <div class="tooltip" id="tooltip" hidden></div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

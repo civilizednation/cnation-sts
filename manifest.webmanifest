@@ -1,0 +1,13 @@
+{
+  "name": "cnation STS — 첨탑을 오르다",
+  "short_name": "cnation STS",
+  "description": "모바일 세로형 로그라이크 덱빌딩 게임. 1층부터 50층까지 첨탑을 오르세요.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#0b0910",
+  "theme_color": "#0b0910",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
