@@ -14,6 +14,14 @@ export const RARITY_KR = { basic: '기본', common: '일반', uncommon: '고급'
 /** id -> 카드 정의 */
 export const CARD_DEFS = {};
 
+/**
+ * 카드 수치 미리보기 훅.
+ * 전투 중 힘/민첩/약화/취약 등이 반영된 실제 수치를 카드에 보여주기 위해
+ * 렌더링 직전에만 설정하고 바로 해제한다. (전투 로직 실행 중에는 항상 null)
+ */
+let PREVIEW = null;
+export function setCardPreview(fn) { PREVIEW = fn; }
+
 /** 카드 정의 등록 */
 export function def(o) {
   if (CARD_DEFS[o.id]) console.warn('중복 카드 id:', o.id);
@@ -38,12 +46,15 @@ export class Card {
     this.temporary = false;     // 전투 종료 시 사라지는 카드
     this.purgeOnEnd = false;
   }
-  /** 업그레이드 반영 수치 */
+  /** 업그레이드 반영 수치 (+ 렌더링 시 전투 보정 미리보기) */
   v(key) {
     const d = this.def;
     const up = d[key + 'U'];
-    if (this.upgraded && up !== undefined) return up;
-    return d[key];
+    const val = (this.upgraded && up !== undefined) ? up : d[key];
+    if (PREVIEW && typeof val === 'number' && (key === 'dmg' || key === 'blk')) {
+      return PREVIEW(this, key, val);
+    }
+    return val;
   }
   get name() {
     if (!this.upgraded) return this.def.name;

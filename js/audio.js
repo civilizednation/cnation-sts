@@ -159,6 +159,33 @@ export const SFX = {
   },
   /** 모닥불 */
   campfire() { hit({ dur: 1.1, vol: 0.16, freq: 700, q: 0.3, sweep: 200 }); },
+  /** 번개 구체 발사 */
+  thunder() {
+    hit({ dur: 0.1, vol: 0.5, freq: 4200, q: 0.5, sweep: 1600 });
+    tone({ freq: 1400, type: 'sawtooth', dur: 0.14, vol: 0.28, slide: 220, delay: 0.02 });
+    hit({ dur: 0.55, vol: 0.45, freq: 260, q: 0.4, type: 'lowpass', sweep: 60, delay: 0.06 });
+    tone({ freq: 70, type: 'square', dur: 0.4, vol: 0.22, slide: 38, delay: 0.08 });
+  },
+  /** 냉기 구체 */
+  ice() {
+    [1800, 2400, 3100].forEach((f, i) => tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.16, delay: i * 0.04, slide: f * 1.3 }));
+    hit({ dur: 0.35, vol: 0.2, freq: 5200, q: 1.4, sweep: 1800 });
+  },
+  /** 암흑 구체 */
+  darkBlast() {
+    tone({ freq: 220, type: 'sawtooth', dur: 0.5, vol: 0.3, slide: 45 });
+    hit({ dur: 0.5, vol: 0.32, freq: 700, q: 0.6, sweep: 90 });
+  },
+  /** 플라즈마 구체 */
+  plasmaPop() {
+    tone({ freq: 640, type: 'square', dur: 0.14, vol: 0.22, slide: 1900 });
+    tone({ freq: 1300, type: 'triangle', dur: 0.24, vol: 0.18, slide: 2600, delay: 0.05 });
+  },
+  /** 구체 충전 */
+  orbCharge() {
+    tone({ freq: 420, type: 'sine', dur: 0.26, vol: 0.2, slide: 1250 });
+    hit({ dur: 0.2, vol: 0.14, freq: 2600, q: 1.6, sweep: 5200 });
+  },
   /** 카드 업그레이드 */
   upgrade() {
     [660, 990, 1320, 1760].forEach((f, i) => tone({ freq: f, type: 'sine', dur: 0.5, vol: 0.2, delay: i * 0.06 }));

@@ -276,10 +276,6 @@ export class Run {
     // 1막 초반 2번의 전투는 몸풀기용으로 약하게 조정한다
     if (this.act === 1 && this.monsterCount === 1) {
       list = this.rng.pick(OPENING_ENCOUNTERS);
-      tuning = { hp: 0.55, dmg: 0.5, label: '몸풀기' };
-    } else if (this.act === 1 && this.monsterCount === 2) {
-      if (!this.monsterQueue.length) this.monsterQueue = this.rng.shuffle(ENCOUNTERS[this.act].weak.slice());
-      list = this.monsterQueue.pop();
       tuning = { hp: 0.75, dmg: 0.7, label: '약함' };
     } else if (this.monsterCount <= weakCount) {
       if (!this.monsterQueue.length) this.monsterQueue = this.rng.shuffle(ENCOUNTERS[this.act].weak.slice());

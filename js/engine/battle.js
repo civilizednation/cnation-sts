@@ -645,8 +645,8 @@ export class Battle {
       if (this.orbs.length >= this.orbSlots) this.evoke(1);
       this.orbs.push({ type, amount: type === 'dark' ? 6 + this.focus : 0 });
       this.channeledCount[type] = (this.channeledCount[type] || 0) + 1;
-      this.fx('orb', { type, action: 'channel' });
-      this.ui.sfx && this.ui.sfx('energy');
+      this.render();
+      this.fx('orbChannel', { type });
     }
     this.render();
   }
@@ -654,8 +654,7 @@ export class Battle {
   evokeFront(times = 1) {
     const orb = this.orbs.shift();
     if (!orb) return;
-    for (let i = 0; i < times; i++) this.orbEffect(orb, true);
-    this.fx('orb', { type: orb.type, action: 'evoke' });
+    for (let i = 0; i < times; i++) this.orbEffect(orb, true, i === 0);
     this.render();
   }
   /** 맨 앞 구체 발동 후 제거 */
@@ -663,8 +662,7 @@ export class Battle {
     for (let i = 0; i < n; i++) {
       const orb = keep ? this.orbs[0] : this.orbs.shift();
       if (!orb) return;
-      this.orbEffect(orb, true);
-      this.fx('orb', { type: orb.type, action: 'evoke' });
+      this.orbEffect(orb, true, !keep);
     }
     this.render();
   }
@@ -674,28 +672,41 @@ export class Battle {
     for (let t = 0; t < times; t++) list.forEach((o) => this.orbEffect(o, true));
     this.render();
   }
-  /** 구체 효과 (evoke=true 면 발동, false 면 패시브) */
-  orbEffect(orb, evokeIt) {
+  /**
+   * 구체 효과. evokeIt=true 면 발동, false 면 턴 종료 패시브.
+   * consume 은 연출에서 구체를 실제로 소모해 보일지 여부 (다중 시전 대응).
+   */
+  orbEffect(orb, evokeIt, consume = true) {
     const f = this.focus;
     const living = this.living();
+    const fire = (targets) => this.fx('orbFire', { type: orb.type, targets, evoke: !!evokeIt && consume });
     switch (orb.type) {
       case 'lightning': {
         const dmg = (evokeIt ? 8 : 3) + f;
-        if (!living.length) break;
-        if (this.pow(this.player, 'electro') > 0) living.forEach((e) => this.orbDamage(e, dmg));
-        else this.orbDamage(this.rng.pick(living), dmg);
+        if (!living.length) { fire([]); break; }
+        if (this.pow(this.player, 'electro') > 0) {
+          fire(living.slice());
+          living.slice().forEach((e) => this.orbDamage(e, dmg));
+        } else {
+          const t = this.rng.pick(living);
+          fire([t]);
+          this.orbDamage(t, dmg);
+        }
         break;
       }
       case 'frost':
+        fire([]);
         this.gainBlock(this.player, (evokeIt ? 5 : 2) + f, null, true);
         break;
       case 'dark':
         if (evokeIt) {
           const t = living.slice().sort((a, b) => a.hp - b.hp)[0];
+          fire(t ? [t] : []);
           if (t) this.orbDamage(t, orb.amount);
-        } else orb.amount += 6 + f;
+        } else { orb.amount += 6 + f; fire([]); }
         break;
       case 'plasma':
+        fire([]);
         this.gainEnergy(evokeIt ? 2 : 1);
         break;
     }
@@ -703,7 +714,6 @@ export class Battle {
   orbDamage(target, amount) {
     let d = amount;
     if (this.pow(target, 'lockOn') > 0) d = Math.floor(d * 1.5);
-    this.fx('orbHit', { dst: target, amount: d });
     this.applyDamage(this.player, target, d, null, 'orb');
   }
   /** 턴 종료 시 구체 패시브 */
@@ -760,6 +770,21 @@ export class Battle {
     this.render();
   }
 
+  /** 카드에 표시할 실제 수치 (힘/약화/취약/자세/민첩/허약 반영) */
+  previewValue(card, key, base) {
+    if (key === 'dmg') {
+      const t = (this.previewTarget && this.previewTarget.alive) ? this.previewTarget : this.living()[0];
+      if (!t) return base;
+      return this.attackValue(this.player, t, base, card);
+    }
+    if (key === 'blk') {
+      let v = base + this.pow(this.player, 'dexterity');
+      if (this.pow(this.player, 'frail') > 0) v = Math.floor(v * 0.75);
+      return Math.max(0, v);
+    }
+    return base;
+  }
+
   // ---------------- 의도(Intent) ----------------
   rollIntent(e) {
     if (!e.alive) return;
@@ -771,15 +796,21 @@ export class Battle {
     const mv = e.def.moves[moveId];
     if (!mv) return;
     e.nextMove = moveId;
-    let dmg = mv.dmg;
-    if (mv.dyn) dmg = mv.dyn(e, this);
     const hits = mv.dynHits ? mv.dynHits(e) : (mv.hits || 1);
     e.intent = {
       move: moveId, name: mv.name, type: mv.intent,
-      dmg: dmg !== undefined ? this.attackValue(e, this.player, dmg, null) : null,
+      baseDmg: mv.dmg, dyn: mv.dyn || null,
       hits, blk: mv.blk || null,
     };
     this.render();
+  }
+  /** 적 의도의 현재 예상 피해량 (약화/취약/힘 변화가 즉시 반영된다) */
+  intentDamage(e) {
+    if (!e || !e.intent) return null;
+    let base = e.intent.baseDmg;
+    if (e.intent.dyn) base = e.intent.dyn(e, this);
+    if (base === undefined || base === null) return null;
+    return this.attackValue(e, this.player, base, null);
   }
   isAttackIntent(e) {
     return e.intent && ['attack', 'attackDefend', 'attackDebuff', 'attackBuff'].includes(e.intent.type);
@@ -901,6 +932,8 @@ export class Battle {
 
     this.log(`--- ${this.turn}턴 ---`);
     this.render();
+    // 턴 시작 피해(유물/중독/구체 등)로 마지막 적이 죽었을 수 있다
+    if (this.checkEnd()) this.finish();
   }
 
   /** 해당 액터의 턴 시작 효과 (중독, 힘 증가 등) */

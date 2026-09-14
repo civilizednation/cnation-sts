@@ -283,6 +283,8 @@ html, body {
 .card-body { flex: 1 1 auto; padding: 4px 4px 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .card-desc { font-size: 8px; line-height: 1.28; text-align: center; color: #e2dcea; word-break: keep-all; }
 .card-desc .num { color: #fff; font-weight: 700; }
+.card-desc .num.buffed { color: #7cff9a; text-shadow: 0 0 6px rgba(124,255,154,.7); }
+.card-desc .num.nerfed { color: #ff9a6a; text-shadow: 0 0 6px rgba(255,154,106,.6); }
 .card-desc .kw-debuff { color: #d99aff; } .card-desc .kw-buff { color: #ffd24a; }
 .card-desc .kw-block { color: #7ac8ff; } .card-desc .kw-energy { color: #ffcf4a; }
 .card-desc .kw-exhaust { color: #ff9a7a; } .card-desc .kw-key { color: #9aff9a; }
@@ -351,9 +353,22 @@ html, body {
   border: 2px solid var(--gold-dim); display: grid; place-items: center;
 }
 .relic-big svg { width: 26px; height: 26px; }
-.shop-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.shop-item { display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; }
 .price { color: var(--gold); font-weight: 700; font-size: 12px; }
 .price.cant { color: #a05050; }
+.price s { color: #7a7288; font-weight: 400; font-size: 11px; margin-right: 2px; }
+.sale-badge {
+  position: absolute; top: -6px; right: -8px; z-index: 5;
+  background: linear-gradient(#ff5a4a, #b02020); color: #fff;
+  font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid #ffb0a0; box-shadow: 0 2px 6px rgba(0,0,0,.6);
+  transform: rotate(8deg);
+}
+.shop-item.on-sale .card-inner { box-shadow: 0 0 12px rgba(255,90,74,.55), 0 4px 12px rgba(0,0,0,.6); }
+.sale-tag {
+  display: inline-block; background: linear-gradient(#ff5a4a, #b02020); color: #fff;
+  font-size: 9.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; vertical-align: middle;
+}
 
 /* 캐릭터 선택 */
 .char-row {
@@ -383,20 +398,14 @@ html, body {
 .stance-badge.s-wrath { color: #ff9a6a; border-color: #d05a3a; background: rgba(180,60,30,.35); }
 .stance-badge.s-calm { color: #8ad0ff; border-color: #3a7ad0; background: rgba(30,90,180,.35); }
 .stance-badge.s-divinity { color: #ffe48a; border-color: #d0a83a; background: rgba(180,140,30,.4); box-shadow: 0 0 10px rgba(255,210,90,.5); }
-.orb-row { display: flex; gap: 3px; justify-content: center; margin-top: 2px; }
-.orb {
-  width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; position: relative;
-  border: 1.5px solid rgba(255,255,255,.35);
+/* 3D 구체 위에 겹쳐 그리는 수치 라벨 */
+.orb-labels { position: absolute; inset: 0; pointer-events: none; }
+.orb-label {
+  position: absolute; transform: translate(-50%, -50%);
+  font-size: 11px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.9); pointer-events: none;
 }
-.orb.empty { border-style: dashed; border-color: rgba(255,255,255,.18); background: rgba(0,0,0,.25); }
-.orb.o-lightning { background: radial-gradient(circle at 35% 30%, #ffe97a, #b07a10); box-shadow: 0 0 7px rgba(255,220,90,.6); }
-.orb.o-frost { background: radial-gradient(circle at 35% 30%, #b0e8ff, #2060a0); box-shadow: 0 0 7px rgba(130,220,255,.6); }
-.orb.o-dark { background: radial-gradient(circle at 35% 30%, #a070d0, #2a1040); box-shadow: 0 0 7px rgba(160,110,220,.6); }
-.orb.o-plasma { background: radial-gradient(circle at 35% 30%, #fff0a0, #d06a10); box-shadow: 0 0 9px rgba(255,200,80,.75); }
-.orb span {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000;
-}
+.orb-label.dot { display: none; }
 
 /* 토스트 */
 .toast-layer { position: absolute; top: calc(52px + var(--safe-t)); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; pointer-events: none; z-index: 200; }

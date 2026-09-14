@@ -191,6 +191,58 @@ function buildPedestal(color, big) {
   return g;
 }
 
+/** 위로 향하는 화살표 (진입 가능 표시) */
+function buildArrow(color) {
+  const g = new THREE.Group();
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.34, 4), new THREE.MeshBasicMaterial({ color }));
+  cone.position.y = 0.17;
+  g.add(cone);
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.22, 0.09), new THREE.MeshBasicMaterial({ color }));
+  shaft.position.y = -0.06;
+  g.add(shaft);
+  return g;
+}
+
+/** 현재 위치 표식 : 흰 빛기둥 + 바닥 링 */
+function buildHereMarker() {
+  const g = new THREE.Group();
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.34, 0.66, 3.0, 12, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff4c0, transparent: true, opacity: 0.13, side: THREE.DoubleSide,
+      depthWrite: false, blending: THREE.AdditiveBlending }));
+  beam.position.y = 0.75;
+  g.add(beam);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.055, 6, 26),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = -0.66;
+  g.add(ring);
+  const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.02, 0.03, 6, 26),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
+  ring2.rotation.x = Math.PI / 2;
+  ring2.position.y = -0.66;
+  g.add(ring2);
+  g.userData.ring2 = ring2;
+  return g;
+}
+
+/** 그룹 전체의 불투명도/채도를 낮춘다 */
+function dimGroup(group, opacity, gray) {
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone();
+    o.material.transparent = true;
+    o.material.opacity = opacity;
+    if (gray && o.material.color) {
+      const hsl = { h: 0, s: 0, l: 0 };
+      o.material.color.getHSL(hsl);
+      o.material.color.setHSL(hsl.h, hsl.s * 0.25, hsl.l * 0.55);
+      if (o.material.emissive) o.material.emissive.multiplyScalar(0.2);
+    }
+  });
+}
+
 // ---------------- 지도 구성 ----------------
 export function buildMap(run, onSelect) {
   if (!ready) return;
@@ -212,19 +264,34 @@ export function buildMap(run, onSelect) {
       const key = `${r},${c}`;
       const a = availMap.get(key);
       const isAvail = !!a;
+      const isCurrent = !!(run.mapPos && run.mapPos.row === r && run.mapPos.col === c);
       const grp = new THREE.Group();
       const color = ROOM_COLOR3D[node.type] || 0xffffff;
-      grp.add(buildPedestal(isAvail ? 0xffd24a : color, false));
+      grp.add(buildPedestal(isCurrent ? 0xffffff : isAvail ? 0xffd24a : color, false));
       const icon = buildIcon(node.type);
       icon.position.y = 0.05;
       grp.add(icon);
       grp.position.copy(posOf(r, c, row.length));
       grp.scale.setScalar(0.82);
-      if (node.visited) grp.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.opacity = 0.32; o.material.transparent = true; } });
+
+      // 상태별 시각 구분 : 현재 위치 / 갈 수 있는 길 / 갈 수 없는 길
+      let arrow = null, here = null;
+      if (isCurrent) {
+        here = buildHereMarker();
+        grp.add(here);
+      } else if (isAvail) {
+        arrow = buildArrow(a.fly ? 0x8ad0ff : 0xffd24a);
+        arrow.position.y = 1.45;
+        grp.add(arrow);
+      } else if (node.visited) {
+        dimGroup(grp, 0.3, true);
+      } else {
+        dimGroup(grp, 0.42, true);   // 지금은 갈 수 없는 길
+      }
       scene.add(grp);
       nodeMeshes.push({
-        group: grp, icon, r, c, type: node.type, avail: isAvail, fly: !!(a && a.fly),
-        visited: node.visited, current: run.mapPos && run.mapPos.row === r && run.mapPos.col === c,
+        group: grp, icon, arrow, here, r, c, type: node.type, avail: isAvail, fly: !!(a && a.fly),
+        visited: node.visited, current: isCurrent,
         select: { row: r, col: c, fly: !!(a && a.fly) },
       });
     });
@@ -239,34 +306,45 @@ export function buildMap(run, onSelect) {
   bossGrp.add(bossIcon);
   bossGrp.position.set(0, rows * ROW_GAP + 0.6, 0);
   bossGrp.scale.setScalar(0.95);
+  let bossArrow = null;
+  if (bossAvail) { bossArrow = buildArrow(0xffd24a); bossArrow.position.y = 1.9; bossGrp.add(bossArrow); }
+  else dimGroup(bossGrp, 0.5, true);
   scene.add(bossGrp);
-  nodeMeshes.push({ group: bossGrp, icon: bossIcon, r: rows, c: 0, type: 'boss', avail: bossAvail, select: { boss: true } });
+  nodeMeshes.push({ group: bossGrp, icon: bossIcon, arrow: bossArrow, r: rows, c: 0, type: 'boss', avail: bossAvail, select: { boss: true } });
 
   // 연결선
-  const linkMat = new THREE.MeshBasicMaterial({ color: 0x6a5a8a, transparent: true, opacity: 0.55 });
-  const addLink = (a, b, visited) => {
+  const dullMat = new THREE.MeshBasicMaterial({ color: 0x4a4060, transparent: true, opacity: 0.32 });
+  const doneMat = new THREE.MeshBasicMaterial({ color: 0xc8a24a, transparent: true, opacity: 0.6 });
+  const openMat = new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 1 });
+  const addLink = (a, b, kind) => {
     const dir = new THREE.Vector3().subVectors(b, a);
     const len = dir.length();
-    const geo = new THREE.CylinderGeometry(0.035, 0.035, len, 5, 1, true);
-    const mesh = new THREE.Mesh(geo, visited ? new THREE.MeshBasicMaterial({ color: 0xc8a24a, transparent: true, opacity: 0.75 }) : linkMat);
+    const w = kind === 'open' ? 0.075 : 0.032;
+    const geo = new THREE.CylinderGeometry(w, w, len, 6, 1, true);
+    const mesh = new THREE.Mesh(geo, kind === 'open' ? openMat : kind === 'done' ? doneMat : dullMat);
     mesh.position.copy(a).add(b).multiplyScalar(0.5);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
     mesh.userData.isLink = true;
+    if (kind === 'open') mesh.userData.pulse = true;
     scene.add(mesh);
   };
+  const cur = run.mapPos;
   run.map.forEach((row, r) => {
     if (r >= rows - 1) return;
     row.forEach((node, c) => {
       const from = posOf(r, c, row.length).clone().add(new THREE.Vector3(0, -0.45, 0));
+      const fromCurrent = cur && cur.row === r && cur.col === c;
       node.next.forEach((nc) => {
         const to = posOf(r + 1, nc, run.map[r + 1].length).clone().add(new THREE.Vector3(0, -0.8, 0));
-        addLink(from, to, node.visited);
+        const open = fromCurrent && availMap.has(`${r + 1},${nc}`);
+        addLink(from, to, open ? 'open' : node.visited ? 'done' : 'dull');
       });
     });
   });
   run.map[rows - 1].forEach((_, c) => {
     const from = posOf(rows - 1, c, run.map[rows - 1].length).clone().add(new THREE.Vector3(0, -0.4, 0));
-    addLink(from, new THREE.Vector3(0, rows * ROW_GAP - 0.4, 0), false);
+    const fromCurrent = cur && cur.row === rows - 1 && cur.col === c;
+    addLink(from, new THREE.Vector3(0, rows * ROW_GAP - 0.4, 0), fromCurrent && bossAvail ? 'open' : 'dull');
   });
 
   // 카메라 범위 & 초기 위치 (선택 가능한 노드로)
@@ -351,11 +429,18 @@ function loop() {
       n.group.rotation.y = Math.sin(t * 0.35 + off) * 0.18;
       if (n.baseScale === undefined) n.baseScale = n.group.scale.x;
     }
+    if (n.arrow) { n.arrow.position.y = (n.arrowY !== undefined ? n.arrowY : (n.arrowY = n.arrow.position.y)) + Math.sin(t * 4 + off) * 0.16; }
+    if (n.here) {
+      n.here.rotation.y += dt * 0.5;
+      const r2 = n.here.userData.ring2;
+      if (r2) { const k = 1 + (Math.sin(t * 2) * 0.5 + 0.5) * 0.5; r2.scale.set(k, k, 1); r2.material.opacity = 0.5 * (1.5 - k); }
+    }
     const ic = n.icon && n.icon.userData;
     if (ic && ic.spin) ic.spin.rotation.y += dt * 1.1;
     if (ic && ic.ring) ic.ring.rotation.z += dt * 0.8;
     if (ic && ic.flame) ic.flame.scale.setScalar(1 + Math.sin(t * 6 + off) * 0.12);
   });
+  scene.children.forEach((o) => { if (o.userData.pulse) o.material.opacity = 0.75 + Math.sin(t * 5) * 0.25; });
   renderer.render(scene, camera);
 }
 

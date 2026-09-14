@@ -262,9 +262,6 @@ function goMap() {
   saveRun(G.run);
 }
 
-const ORB_KR = { lightning: '번개', frost: '냉기', dark: '암흑', plasma: '플라즈마' };
-const ORB_GLYPH = { lightning: 'lightning', frost: 'drop', dark: 'ring', plasma: 'star' };
-
 const ROOM_GLYPH = { monster: 'sword', elite: 'skull', event: 'question', rest: 'flame', shop: 'potion', treasure: 'star', boss: 'crown' };
 const ROOM_COLOR = { monster: '#d0a0a0', elite: '#ff6a5a', event: '#a0d0ff', rest: '#ffa04a', shop: '#8affc0', treasure: '#ffd24a', boss: '#ff5a4a' };
 
@@ -400,6 +397,20 @@ function battleFx(type, d) {
     case 'buffer':
       popup(d.actor, '무효', 'block');
       break;
+    case 'orbChannel':
+      S3.syncOrbs(B.orbs, B.orbSlots);
+      S3.fxOrbChannel(d.type);
+      SFX.orbCharge();
+      break;
+    case 'orbFire': {
+      S3.fxOrb(d.type, d.targets, d.evoke, B.player);
+      if (d.type === 'lightning') SFX.thunder();
+      else if (d.type === 'frost') SFX.ice();
+      else if (d.type === 'dark') SFX.darkBlast();
+      else SFX.plasmaPop();
+      if (d.evoke && d.type === 'lightning') S3.fxScreenShake(0.8);
+      break;
+    }
     case 'exhaust': case 'shuffle': case 'draw': case 'gainCard': case 'play':
       break;
   }
@@ -427,6 +438,7 @@ function renderBattle() {
   renderPotions();
   renderHand();
   renderUnits();
+  if (B.orbSlots) { S3.syncOrbs(B.orbs, B.orbSlots); renderOrbLabels(B); }
   const et = $('#btn-endturn');
   et.disabled = !B.playerTurn || B.over;
   et.classList.toggle('ready', B.playerTurn && !B.hand.some((c) => B.canPlay(c)));
@@ -462,7 +474,8 @@ function renderUnits() {
     if (!isPlayer && actor.intent && B.playerTurn && !G.run.hasRelic('runicDome')) {
       const it = actor.intent;
       let label = '';
-      if (it.dmg !== null && it.dmg !== undefined) label = it.hits > 1 ? `${it.dmg}×${it.hits}` : `${it.dmg}`;
+      const dmg = B.intentDamage(actor);
+      if (dmg !== null && dmg !== undefined) label = it.hits > 1 ? `${dmg}×${it.hits}` : `${dmg}`;
       else if (it.type === 'defend' || it.type === 'defendBuff' || it.type === 'defendDebuff') label = it.blk ? `${it.blk}` : '';
       html += `<div class="intent" style="border-color:${INTENT_COLOR[it.type] || '#888'}">${intentIcon(it.type)}<span>${label}</span></div>`;
     }
@@ -472,21 +485,8 @@ function renderUnits() {
     if (actor.block > 0) {
       u.appendChild(el('div', { class: 'unit-block', text: String(actor.block) }));
     }
-    if (isPlayer) {
-      if (B.stance && B.stance !== 'neutral') {
-        u.appendChild(el('div', { class: 'stance-badge s-' + B.stance, text: STANCE_KR[B.stance] }));
-      }
-      if (B.orbs && B.orbs.length) {
-        const row = el('div', { class: 'orb-row' });
-        B.orbs.forEach((o) => {
-          const chip = el('div', { class: 'orb o-' + o.type, title: ORB_KR[o.type] });
-          chip.innerHTML = svgIcon(ORB_GLYPH[o.type], { size: 13, color: '#fff' }) +
-            (o.type === 'dark' ? `<span>${o.amount}</span>` : '');
-          row.appendChild(chip);
-        });
-        for (let i = B.orbs.length; i < B.orbSlots; i++) row.appendChild(el('div', { class: 'orb empty' }));
-        u.appendChild(row);
-      }
+    if (isPlayer && B.stance && B.stance !== 'neutral') {
+      u.appendChild(el('div', { class: 'stance-badge s-' + B.stance, text: STANCE_KR[B.stance] }));
     }
     const pw = el('div', { class: 'powers' });
     Object.entries(actor.powers).forEach(([id, n]) => {
@@ -505,10 +505,40 @@ function renderUnits() {
   };
   const units = [mk2(B.player, true), ...B.enemies.filter((e) => e.alive).map((e) => mk2(e, false))];
   units.forEach((u) => ov.appendChild(u));
+  if (B.orbSlots) renderOrbLabels(B);
   if (G.targeting) {
     ov.appendChild(el('div', { class: 'hint-banner', text: '공격할 대상을 선택하세요' }));
   }
   positionUnits();
+}
+
+/** 3D 구체 위에 표시할 수치(암흑 구체) 라벨 */
+function renderOrbLabels(B) {
+  let box = $('#orb-labels');
+  if (!box) {
+    box = el('div', { class: 'orb-labels', id: 'orb-labels' });
+    $('#stage-overlay').appendChild(box);
+  }
+  box.innerHTML = '';
+  (B.orbs || []).forEach((o, i) => {
+    const lb = el('div', { class: 'orb-label o-' + o.type });
+    lb.dataset.i = i;
+    lb.textContent = o.type === 'dark' ? String(o.amount) : '';
+    if (o.type !== 'dark') lb.classList.add('dot');
+    box.appendChild(lb);
+  });
+}
+
+function positionOrbLabels() {
+  const box = $('#orb-labels');
+  if (!box) return;
+  $$('.orb-label', box).forEach((lb) => {
+    const p = S3.orbScreenPos(Number(lb.dataset.i));
+    if (!p) { lb.style.display = 'none'; return; }
+    lb.style.display = '';
+    lb.style.left = p.x + 'px';
+    lb.style.top = p.y + 'px';
+  });
 }
 
 function positionUnits() {
@@ -528,7 +558,7 @@ function positionUnits() {
 
 function startOverlayLoop() {
   stopOverlayLoop();
-  const loop = () => { positionUnits(); G.overlayRAF = requestAnimationFrame(loop); };
+  const loop = () => { positionUnits(); positionOrbLabels(); G.overlayRAF = requestAnimationFrame(loop); };
   G.overlayRAF = requestAnimationFrame(loop);
 }
 function stopOverlayLoop() { if (G.overlayRAF) cancelAnimationFrame(G.overlayRAF); G.overlayRAF = null; }
@@ -541,8 +571,9 @@ function renderHand() {
   const n = B.hand.length;
   const w = handEl.clientWidth || innerWidth - 100;
   const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w')) || 88;
+  const preview = (card, key, base) => B.previewValue(card, key, base);
   B.hand.forEach((card, i) => {
-    const c = renderCard(card);
+    const c = renderCard(card, { preview });
     const t = n === 1 ? 0.5 : i / (n - 1);
     const spread = Math.min(w - cw - 42, Math.max(0, (n - 1) * cw * 0.86));
     const x = w / 2 + (t - 0.5) * spread - cw / 2;
@@ -726,6 +757,8 @@ function chooseCardsModal(list, opts = {}) {
         const ce = renderCard(c, { small: true });
         ce.addEventListener('click', () => {
           SFX.cardPick();
+          // autoPick : 1장 선택이면 고르는 즉시 확정 (건너뛰기 버튼은 유지)
+          if (opts.autoPick && count === 1) { chosen.length = 0; chosen.push(c); finish(); return; }
           const i = chosen.findIndex((x) => x.uid === c.uid);
           if (i >= 0) { chosen.splice(i, 1); ce.classList.remove('selected'); }
           else if (chosen.length < count) { chosen.push(c); ce.classList.add('selected'); }
@@ -825,11 +858,27 @@ function showUpgradePreview(card) {
   });
 }
 
+/** 카드 제거 전 확인 */
+function confirmRemove(card, price) {
+  return new Promise((resolve) => {
+    openModal((box) => {
+      box.append(modalTitle('이 카드를 제거하시겠습니까?'));
+      const big = renderCardBig(card);
+      big.style.margin = '0 auto';
+      box.append(big);
+      if (price !== undefined) box.append(el('p', { class: 'modal-text', text: `비용 ${price} 골드 · 되돌릴 수 없습니다.` }));
+      box.append(el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn danger', text: '제거한다', onclick: () => { closeModal(); resolve(true); } }),
+        el('button', { class: 'btn ghost', text: '취소', onclick: () => { SFX.tap(); closeModal(); resolve(false); } })));
+    });
+  });
+}
+
 /** 카드를 고르고 → 미리보기 확인 → 강화. 취소하면 null */
 async function pickAndUpgrade(cands, title = '강화할 카드 선택') {
   if (!cands.length) { toast('강화할 카드가 없습니다.'); return null; }
   for (let guard = 0; guard < 30; guard++) {
-    const [c] = await chooseCardsModal(cands, { count: 1, title, optional: true });
+    const [c] = await chooseCardsModal(cands, { count: 1, title, optional: true, autoPick: true });
     if (!c) return null;
     const ok = await showUpgradePreview(c);
     if (ok) { c.upgrade(); return c; }
@@ -1114,6 +1163,17 @@ function showShop() {
   }
   const removalPrice = run.hasRelic('smilingMask') ? 50 : 75 + (run.flags.removals || 0) * 25;
 
+  // 무작위 상품 1개 할인 (반값 또는 80% 할인)
+  const allItems = [...cardItems, ...relicItems, ...potionItems];
+  if (allItems.length) {
+    const sale = run.rng.pick(allItems);
+    const rate = run.rng.chance(0.5) ? 0.5 : 0.2;   // 50% 할인 / 80% 할인
+    sale.saleRate = rate;
+    sale.oldPrice = sale.price;
+    sale.price = Math.max(1, Math.round(sale.price * rate));
+    sale.saleLabel = rate === 0.5 ? '반값' : '80% 할인';
+  }
+
   const rebuild = () => {
     openModal((box) => {
       box.append(modalTitle('상점'), el('p', { class: 'modal-text', text: `보유 골드 : ${run.gold}G` }));
@@ -1121,10 +1181,12 @@ function showShop() {
       const grid = el('div', { class: 'card-grid' });
       cardItems.forEach((it) => {
         if (it.sold) return;
-        const wrap = el('div', { class: 'shop-item' });
+        const wrap = el('div', { class: 'shop-item' + (it.saleRate ? ' on-sale' : '') });
         const ce = renderCard(it.card, { small: true });
         ce.style.position = 'relative';
-        wrap.append(ce, el('div', { class: 'price' + (run.gold < it.price ? ' cant' : ''), text: `${it.price}G` }));
+        if (it.saleRate) ce.appendChild(el('div', { class: 'sale-badge', text: it.saleLabel }));
+        wrap.append(ce, el('div', { class: 'price' + (run.gold < it.price ? ' cant' : ''),
+          html: it.saleRate ? `<s>${it.oldPrice}G</s> ${it.price}G` : `${it.price}G` }));
         wrap.addEventListener('click', () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           run.spendGold(it.price); run.addCard(it.card); it.sold = true;
@@ -1138,7 +1200,7 @@ function showShop() {
         if (it.sold) return;
         const d = RELICS[it.id];
         const row = el('button', { class: 'reward-row' });
-        row.innerHTML = `<div class="relic-big">${relicIcon(d, 24)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.price}G</span>`;
+        row.innerHTML = `<div class="relic-big">${relicIcon(d, 24)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
         row.addEventListener('click', async () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           run.spendGold(it.price); it.sold = true;
@@ -1151,7 +1213,7 @@ function showShop() {
         if (it.sold) return;
         const d = POTIONS[it.id];
         const row = el('button', { class: 'reward-row' });
-        row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${svgIcon('potion', { size: 22, color: d.color })}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc(1)}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.price}G</span>`;
+        row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${svgIcon('potion', { size: 22, color: d.color })}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc(1)}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
         row.addEventListener('click', () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           if (!run.addPotion(it.id)) { toast('물약 슬롯이 가득 찼습니다.'); return; }
@@ -1166,11 +1228,12 @@ function showShop() {
         row.addEventListener('click', async () => {
           if (run.gold < removalPrice) { toast('골드가 부족합니다.'); return; }
           const cand = run.deck.filter((c) => !c.def.undeletable);
-          const [c] = await chooseCardsModal(cand, { count: 1, title: '제거할 카드' });
-          if (c) {
+          const [c] = await chooseCardsModal(cand, { count: 1, title: '제거할 카드', optional: true, autoPick: true });
+          if (c && await confirmRemove(c, removalPrice)) {
             run.spendGold(removalPrice); run.removeCard(c);
             run.flags.removals = (run.flags.removals || 0) + 1;
             run.flags.shopRemoved = true;
+            SFX.exhaust();
             toast(`${c.name} 제거됨.`);
           }
           rebuild();

@@ -569,6 +569,9 @@ export function setupBattle(battle) {
   models.forEach((m) => root.remove(m.group));
   models.clear();
   tweens.length = 0;
+  if (orbGroup) { root.remove(orbGroup); orbGroup = null; }
+  orbObjs.length = 0;
+  emptyRings = [];
 
   const p = buildPlayer(battle.run && battle.run.character ? battle.run.character.model : null);
   const pBlob = addBlobShadow(p.group, 1);
@@ -607,7 +610,7 @@ export function layoutEnemies(battle) {
     maxX = Math.max(maxX, x + half);
   });
   // 카메라 프레임 폭 : 플레이어(-2.3) ~ 가장 오른쪽 적까지 + 여백
-  setFrameWidth(Math.max(maxX + 3.4, 7.6) * 1.05);
+  setFrameWidth(Math.max(maxX + 3.4, 8.0) * 1.05);
   // 죽은 적 정리
   models.forEach((m, uid) => {
     if (m.actor && m.actor.isPlayer) return;
@@ -825,6 +828,26 @@ function renderFrame() {
     if (m.parts && m.parts.cape) m.parts.cape.rotation.x = 0.14 + Math.sin(t * 1.1) * 0.04;
   });
 
+  // ---- 디펙트 구체 : 주인공을 따라다니며 자기 슬롯으로 부드럽게 이동 ----
+  if (orbGroup) {
+    const pm = [...models.values()].find((m) => m.actor && m.actor.isPlayer);
+    if (pm) orbGroup.position.set(pm.base.x, 0, pm.base.z);
+    const lerp = Math.min(1, dt * 7);
+    orbObjs.forEach((o, i) => {
+      const bob = Math.sin(t * 2.1 + i * 1.3) * 0.09;
+      const tgt = o.target.clone();
+      tgt.y += bob;
+      o.group.position.lerp(tgt, lerp);
+      const sc = o.group.scale.x;
+      if (sc < 1) o.group.scale.setScalar(Math.min(1, sc + dt * 4.5));
+      const ud = o.group.userData;
+      if (ud.core) { ud.core.rotation.y += dt * 1.6; ud.core.rotation.x += dt * 0.9; }
+      if (ud.ring) ud.ring.rotation.z += dt * 1.1;
+      if (ud.halo) ud.halo.scale.setScalar(1 + Math.sin(t * 3.4 + i) * 0.08);
+    });
+    emptyRings.forEach((r, k) => { r.rotation.z += dt * 0.4; });
+  }
+
   // 불빛 흔들림
   const fire = scene.userData.fire;
   if (fire) fire.intensity = 1.0 + Math.sin(t * 7.3) * 0.18 + Math.sin(t * 13.1) * 0.09;
@@ -891,4 +914,249 @@ export function debugPixelTest(w = 390, h = 473) {
     glRenderer: gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info')?.UNMASKED_RENDERER_WEBGL || gl.RENDERER) };
   r2.dispose();
   return info;
+}
+
+// ============================================================
+//  디펙트 구체 : 주인공 주위를 도는 구체 배치 + 발사 연출
+//  배열 순서 : orbs[0] = 가장 먼저 발동(오른쪽/몬스터 쪽)
+//              index 가 커질수록 머리 위 → 왼쪽으로
+//  새 구체는 왼쪽에서 충전되어 오른쪽으로 밀려간다.
+// ============================================================
+let orbGroup = null;
+const orbObjs = [];
+let emptyRings = [];
+
+const ORB_STYLE = {
+  lightning: { color: 0xffe14a, glow: 0xffb020, size: 0.30, geo: () => new THREE.IcosahedronGeometry(0.30, 0) },
+  frost: { color: 0xa8e8ff, glow: 0x3aa0ff, size: 0.32, geo: () => new THREE.OctahedronGeometry(0.33, 0) },
+  dark: { color: 0xb388f0, glow: 0x7a30d0, size: 0.30, geo: () => new THREE.SphereGeometry(0.30, 10, 8) },
+  plasma: { color: 0xffe08a, glow: 0xff8a20, size: 0.29, geo: () => new THREE.SphereGeometry(0.29, 10, 8) },
+};
+
+/** 구체 슬롯 위치 : i=0 이 오른쪽(몬스터 쪽), 커질수록 머리 위 → 왼쪽 */
+function orbSlotPos(i, slots) {
+  const total = Math.max(3, slots || 3);
+  const tt = total <= 1 ? 0.5 : Math.min(1, i / (total - 1));
+  const a = (26 + 116 * tt) * Math.PI / 180;
+  const r = 1.4;
+  // 중심을 살짝 오른쪽으로 밀어 왼쪽 구체가 화면 밖으로 나가지 않게 한다
+  return new THREE.Vector3(0.25 + Math.cos(a) * r, 1.5 + Math.sin(a) * r * 0.82, 0.5);
+}
+
+function ensureOrbGroup() {
+  if (orbGroup) return;
+  orbGroup = new THREE.Group();
+  root.add(orbGroup);
+}
+
+function buildOrb(type) {
+  const st = ORB_STYLE[type] || ORB_STYLE.lightning;
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(st.geo(), new THREE.MeshStandardMaterial({
+    color: st.color, emissive: new THREE.Color(st.glow), emissiveIntensity: 1.8,
+    roughness: 0.25, metalness: 0.35, flatShading: true }));
+  g.add(core);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(st.size * 1.6, 10, 8),
+    new THREE.MeshBasicMaterial({ color: st.glow, transparent: true, opacity: 0.2, depthWrite: false }));
+  g.add(halo);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(st.size * 1.5, 0.028, 5, 18),
+    new THREE.MeshBasicMaterial({ color: st.color, transparent: true, opacity: 0.8 }));
+  ring.rotation.x = Math.PI / 2.6;
+  g.add(ring);
+  const light = new THREE.PointLight(st.glow, 1.0, 3.4);
+  g.add(light);
+  g.userData = { core, ring, halo, type };
+  return g;
+}
+
+function updateEmptyRings(used, slots) {
+  const need = Math.max(0, (slots || 3) - used);
+  while (emptyRings.length > need) { const r = emptyRings.pop(); orbGroup.remove(r); }
+  while (emptyRings.length < need) {
+    const r = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.02, 4, 16),
+      new THREE.MeshBasicMaterial({ color: 0x9a90b8, transparent: true, opacity: 0.28 }));
+    r.rotation.x = Math.PI / 2.6;
+    orbGroup.add(r);
+    emptyRings.push(r);
+  }
+  emptyRings.forEach((r, k) => r.position.copy(orbSlotPos(used + k, slots)));
+}
+
+/** 전투 상태의 구체 배열을 3D 에 반영 */
+export function syncOrbs(orbs, slots) {
+  if (!ready) return;
+  ensureOrbGroup();
+  while (orbObjs.length > orbs.length) {
+    const o = orbObjs.pop();
+    orbGroup.remove(o.group);
+  }
+  orbs.forEach((orb, i) => {
+    let o = orbObjs[i];
+    if (!o || o.type !== orb.type) {
+      if (o) orbGroup.remove(o.group);
+      const grp = buildOrb(orb.type);
+      grp.scale.setScalar(0.01);
+      // 새 구체는 왼쪽 바깥에서 등장
+      grp.position.copy(orbSlotPos(Math.max(i, (slots || 3) - 1), slots)).add(new THREE.Vector3(-1.1, -0.2, 0));
+      orbGroup.add(grp);
+      o = { type: orb.type, group: grp, target: new THREE.Vector3(), fresh: true };
+      orbObjs[i] = o;
+    }
+    o.amount = orb.amount;
+    o.index = i;
+    o.target.copy(orbSlotPos(i, slots));
+  });
+  updateEmptyRings(orbs.length, slots);
+}
+
+/** 화면 좌표 (암흑 구체 수치 라벨용) */
+export function orbScreenPos(i) {
+  const o = orbObjs[i];
+  if (!o || !canvasEl) return null;
+  const v = new THREE.Vector3();
+  o.group.getWorldPosition(v);
+  v.project(camera);
+  const rect = canvasEl.getBoundingClientRect();
+  return { x: (v.x * 0.5 + 0.5) * rect.width, y: (-v.y * 0.5 + 0.5) * rect.height, type: o.type, amount: o.amount };
+}
+export function orbCount() { return orbObjs.length; }
+
+// ---------------- 발사 연출 ----------------
+function actorPos(actor, yOff = 1.4) {
+  const m = models.get(actor && actor.uid);
+  if (!m) return new THREE.Vector3(3, 1.4, 0);
+  const v = new THREE.Vector3();
+  m.group.getWorldPosition(v);
+  v.y += yOff;
+  return v;
+}
+
+/** 들쭉날쭉한 번개 줄기 */
+function spawnBolt(from, to, color, width = 0.07, life = 0.32) {
+  const pts = [];
+  const seg = 7;
+  for (let i = 0; i <= seg; i++) {
+    const p = from.clone().lerp(to, i / seg);
+    if (i > 0 && i < seg) {
+      p.x += (Math.random() - 0.5) * 0.55;
+      p.y += (Math.random() - 0.5) * 0.55;
+      p.z += (Math.random() - 0.5) * 0.35;
+    }
+    pts.push(p);
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const mesh = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 22, width, 5, false),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false }));
+  root.add(mesh);
+  const light = new THREE.PointLight(color, 3, 9);
+  light.position.copy(to);
+  root.add(light);
+  tween({
+    dur: life,
+    update: (k) => { mesh.material.opacity = 1 - k; light.intensity = 3 * (1 - k); },
+    done: () => { root.remove(mesh); root.remove(light); mesh.geometry.dispose(); mesh.material.dispose(); },
+  });
+}
+
+/** 구체에서 대상으로 날아가는 투사체 */
+function spawnProjectile(from, to, color, size = 0.26, life = 0.3) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 6),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+  m.position.copy(from);
+  root.add(m);
+  const light = new THREE.PointLight(color, 2, 6);
+  root.add(light);
+  tween({
+    dur: life,
+    update: (k) => { m.position.copy(from).lerp(to, k); light.position.copy(m.position); m.scale.setScalar(1 + k * 0.6); },
+    done: () => { root.remove(m); root.remove(light); burst(to, color); },
+  });
+}
+
+function burst(pos, color, n = 10) {
+  const g = new THREE.Group();
+  for (let i = 0; i < n; i++) {
+    const s = new THREE.Mesh(new THREE.TetrahedronGeometry(0.12),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }));
+    s.userData.dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+    g.add(s);
+  }
+  g.position.copy(pos);
+  root.add(g);
+  tween({
+    dur: 0.45,
+    update: (k) => g.children.forEach((c) => {
+      c.position.copy(c.userData.dir).multiplyScalar(k * 1.5);
+      c.material.opacity = 1 - k;
+      c.rotation.x += 0.2; c.rotation.y += 0.2;
+    }),
+    done: () => root.remove(g),
+  });
+}
+
+/** 구체 발동 연출. evoke 면 맨 앞 구체를 소모한다. */
+export function fxOrb(type, targets, isEvoke, player) {
+  if (!ready) return;
+  ensureOrbGroup();
+  let fromObj = null;
+  if (isEvoke) fromObj = orbObjs.shift();
+  else fromObj = orbObjs[0];
+  const from = fromObj
+    ? fromObj.group.getWorldPosition(new THREE.Vector3())
+    : actorPos(player, 2.6);
+
+  const st = ORB_STYLE[type] || ORB_STYLE.lightning;
+  const list = (targets || []).filter(Boolean);
+
+  if (type === 'lightning') {
+    (list.length ? list : [null]).forEach((t) => {
+      if (t) spawnBolt(from, actorPos(t), st.color, isEvoke ? 0.09 : 0.055, isEvoke ? 0.36 : 0.26);
+    });
+  } else if (type === 'dark') {
+    (list.length ? list : [null]).forEach((t) => {
+      if (t) spawnProjectile(from, actorPos(t), st.color, isEvoke ? 0.34 : 0.2);
+    });
+  } else if (type === 'frost') {
+    const to = actorPos(player, 1.3);
+    spawnProjectile(from, to, st.color, isEvoke ? 0.3 : 0.18, 0.26);
+  } else if (type === 'plasma') {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8),
+      new THREE.MeshBasicMaterial({ color: st.color, transparent: true, opacity: 0.9 }));
+    m.position.copy(from);
+    root.add(m);
+    tween({
+      dur: 0.45,
+      update: (k) => { m.position.y = from.y + k * 1.1; m.material.opacity = 0.9 * (1 - k); m.scale.setScalar(1 + k); },
+      done: () => root.remove(m),
+    });
+  }
+
+  if (isEvoke && fromObj) {
+    const grp = fromObj.group;
+    tween({
+      dur: 0.22,
+      update: (k) => { grp.scale.setScalar(Math.max(0.01, 1 - k)); },
+      done: () => orbGroup.remove(grp),
+    });
+  }
+}
+
+/** 구체 충전 연출 */
+export function fxOrbChannel(type) {
+  if (!ready || !orbObjs.length) return;
+  const o = orbObjs[orbObjs.length - 1];
+  if (!o) return;
+  const st = ORB_STYLE[type] || ORB_STYLE.lightning;
+  const pos = o.group.getWorldPosition(new THREE.Vector3());
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 6, 20),
+    new THREE.MeshBasicMaterial({ color: st.color, transparent: true, opacity: 0.9 }));
+  ring.position.copy(pos);
+  ring.rotation.x = Math.PI / 2.6;
+  root.add(ring);
+  tween({
+    dur: 0.5,
+    update: (k) => { ring.scale.setScalar(1.8 - k * 1.1); ring.material.opacity = 0.9 * (1 - k); },
+    done: () => root.remove(ring),
+  });
 }

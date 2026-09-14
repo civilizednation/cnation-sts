@@ -2,7 +2,7 @@
 //  카드 시각화 : HTML/CSS + SVG 조합 (외부 이미지 없음)
 // ============================================================
 import { GLYPH, svgIcon } from './icons.js';
-import { TYPE_KR, RARITY_KR } from '../data/carddb.js';
+import { TYPE_KR, RARITY_KR, setCardPreview } from '../data/carddb.js';
 
 /** 카드별 문양 매핑 */
 const ART = {
@@ -113,9 +113,31 @@ const KEYWORDS = [
   ['금속화', 'kw-buff'], ['재생', 'kw-buff'], ['무형', 'kw-buff'], ['활력', 'kw-buff'],
 ];
 
-function decorate(text) {
-  let t = text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  t = t.replace(/(\d+)/g, '<b class="num">$1</b>');
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+/**
+ * 카드 설명 장식.
+ * baseText 가 주어지면 두 문장의 숫자를 자리별로 비교해
+ * 전투 보정으로 달라진 수치만 강조색으로 표시한다.
+ */
+function decorate(text, baseText) {
+  let t = esc(text);
+  if (baseText !== undefined && baseText !== null) {
+    const a = esc(baseText).split(/(\d+)/);
+    const b = t.split(/(\d+)/);
+    if (a.length === b.length) {
+      t = b.map((tok, i) => {
+        if (!/^\d+$/.test(tok)) return tok;
+        if (tok === a[i]) return `<b class="num">${tok}</b>`;
+        const up = Number(tok) > Number(a[i]);
+        return `<b class="num ${up ? 'buffed' : 'nerfed'}">${tok}</b>`;
+      }).join('');
+    } else {
+      t = t.replace(/(\d+)/g, '<b class="num">$1</b>');
+    }
+  } else {
+    t = t.replace(/(\d+)/g, '<b class="num">$1</b>');
+  }
   for (const [k, cls] of KEYWORDS) {
     t = t.split(k).join(`<span class="${cls}">${k}</span>`);
   }
@@ -177,12 +199,23 @@ export function renderCard(card, opts = {}) {
   el.style.setProperty('--c-glow', th.glow);
   el.style.setProperty('--c-rar', RARITY_COLOR[card.rarity] || '#ccc');
   el.dataset.uid = card.uid;
+
+  // 전투 중이면 실제 적용될 수치로 다시 계산해 달라진 부분만 강조한다
+  let baseText = null;
+  let descText = card.text();
+  if (opts.preview) {
+    baseText = descText;
+    setCardPreview(opts.preview);
+    try { descText = card.text(); } finally { setCardPreview(null); }
+    if (descText === baseText) baseText = null;
+  }
+
   el.innerHTML = `
     <div class="card-inner">
       <div class="card-art">${cardArtSVG(card)}</div>
       <div class="card-namebar"><span class="card-name">${card.name}</span></div>
       ${costOrbSVG(card)}
-      <div class="card-body"><div class="card-desc">${decorate(card.text())}</div></div>
+      <div class="card-body"><div class="card-desc">${decorate(descText, baseText)}</div></div>
       <div class="card-footer"><span class="card-type">${TYPE_KR[card.type] || ''}</span>
         <span class="card-rar" title="${RARITY_KR[card.rarity] || ''}"></span></div>
     </div>`;
