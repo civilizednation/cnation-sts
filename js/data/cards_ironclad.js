@@ -333,8 +333,8 @@ def({ id: 'rupture', name: '파열', en: 'Rupture', type: P, rarity: RARITY.UNCO
 
 def({ id: 'searingBlow', name: '작열의 일격', en: 'Searing Blow', type: A, rarity: RARITY.UNCOMMON, color: R, cost: 2, target: E,
   infiniteUpgrade: true,
-  text: D((c) => { const n = c.upgradeCount; return `피해를 ${4 + (n * (n + 7)) / 2} 줍니다. 여러 번 강화할 수 있습니다.`; }),
-  play: (x) => { const n = x.c.upgradeCount; x.B.attack(x, 4 + (n * (n + 7)) / 2); } });
+  text: D((c) => { const n = c.upgradeCount; return `피해를 ${12 + (n * (n + 7)) / 2} 줍니다. 여러 번 강화할 수 있습니다.`; }),
+  play: (x) => { const n = x.c.upgradeCount; x.B.attack(x, 12 + (n * (n + 7)) / 2); } });
 
 def({ id: 'secondWind', name: '재기', en: 'Second Wind', type: S, rarity: RARITY.UNCOMMON, color: R, cost: 1, target: SELF,
   mag: 5, magU: 7,

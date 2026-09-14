@@ -186,6 +186,7 @@ function goMap() {
   renderTopbar('#battle-top');
   renderTopbar('#map-top');
   renderMap();
+  renderPotions('#map-potion-row');
   saveRun(G.run);
 }
 
@@ -234,8 +235,12 @@ function renderMap() {
   requestAnimationFrame(() => drawMapLines(inner));
   const sc = $('#map-scroll');
   requestAnimationFrame(() => {
-    const cur = inner.querySelector('.map-node.avail');
-    if (cur) sc.scrollTop = Math.max(0, cur.offsetTop - sc.clientHeight * 0.55);
+    const nodes = $$('.map-node.avail', inner);
+    const cur = nodes[nodes.length - 1];
+    if (cur) {
+      const top = cur.getBoundingClientRect().top - inner.getBoundingClientRect().top;
+      sc.scrollTop = Math.max(0, top - sc.clientHeight * 0.55);
+    } else sc.scrollTop = sc.scrollHeight;
   });
 }
 
@@ -246,10 +251,16 @@ function drawMapLines(inner) {
   svg.setAttribute('class', 'map-svg');
   svg.setAttribute('width', inner.clientWidth);
   svg.setAttribute('height', inner.scrollHeight);
+  svg.setAttribute('viewBox', `0 0 ${inner.clientWidth} ${inner.scrollHeight}`);
+  svg.style.height = inner.scrollHeight + 'px';
+  const base = inner.getBoundingClientRect();
+  const rectOf = (elm) => {
+    const b = elm.getBoundingClientRect();
+    return { x: b.left - base.left + b.width / 2, y: b.top - base.top + b.height / 2 };
+  };
   const pos = (r, c) => {
     const n = inner.querySelector(`.map-node[data-rc="${r},${c}"]`);
-    if (!n) return null;
-    return { x: n.offsetLeft + n.offsetWidth / 2, y: n.offsetTop + n.offsetHeight / 2 };
+    return n ? rectOf(n) : null;
   };
   const run = G.run;
   for (let r = 0; r < run.map.length - 1; r++) {
@@ -275,7 +286,7 @@ function drawMapLines(inner) {
     run.map[lastRow].forEach((_, ci) => {
       const a = pos(lastRow, ci);
       if (!a) return;
-      const b = { x: bossEl.offsetLeft + bossEl.offsetWidth / 2, y: bossEl.offsetTop + bossEl.offsetHeight / 2 };
+      const b = rectOf(bossEl);
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       const mid = (a.y + b.y) / 2;
       line.setAttribute('d', `M${a.x} ${a.y} C ${a.x} ${mid}, ${b.x} ${mid}, ${b.x} ${b.y}`);
@@ -414,9 +425,10 @@ function renderBattle() {
   et.classList.toggle('ready', B.playerTurn && !B.hand.some((c) => B.canPlay(c)));
 }
 
-function renderPotions() {
-  const row = $('#potion-row');
+function renderPotions(sel = '#potion-row') {
+  const row = $(sel);
   const run = G.run;
+  if (!row || !run) return;
   row.innerHTML = '';
   for (let i = 0; i < run.potionSlots; i++) {
     const p = run.potions[i];
@@ -647,7 +659,7 @@ async function usePotion(idx, target) {
   SFX.potion();
   await d.use(G.battle, mult, target, run);
   if (G.battle) { S3.layoutEnemies(G.battle); renderBattle(); G.battle.checkEnd(); if (G.battle.over) G.battle.finish(); }
-  else { renderTopbar('#map-top'); renderPotions(); }
+  else { renderTopbar('#map-top'); renderPotions('#map-potion-row'); }
   saveRun(run);
 }
 
@@ -693,6 +705,51 @@ function chooseCardsModal(list, opts = {}) {
       function finish() { closeModal(); resolve(chosen); }
     });
   });
+}
+
+
+/** 유물 획득 : 획득 즉시 선택/보상이 필요한 유물 처리 */
+async function gainRelic(id) {
+  const run = G.run;
+  if (!id || !run.addRelic(id)) return false;
+  SFX.relic();
+  const pick = async (filter, title) => {
+    const cand = run.deck.filter(filter);
+    if (!cand.length) return null;
+    const [c] = await chooseCardsModal(cand, { count: 1, title });
+    return c;
+  };
+  if (id === 'bottledFlame' || id === 'bottledLightning' || id === 'bottledTornado') {
+    const want = { bottledFlame: 'attack', bottledLightning: 'skill', bottledTornado: 'power' }[id];
+    const c = await pick((x) => x.type === want, `${RELICS[id].name} — 담을 카드 선택`);
+    if (c) { run.relicObj(id).cardUid = c.uid; toast(`${c.name}을(를) 병에 담았다.`); }
+  } else if (id === 'emptyCage') {
+    for (let i = 0; i < 2; i++) {
+      const c = await pick((x) => !x.def.undeletable, '제거할 카드 선택 (2장)');
+      if (c) run.removeCard(c);
+    }
+    toast('덱에서 카드 2장을 제거했다.');
+  } else if (id === 'astrolabe') {
+    for (let i = 0; i < 3; i++) {
+      const c = await pick((x) => !x.def.undeletable, '변환할 카드 선택 (3장)');
+      if (!c) break;
+      run.removeCard(c);
+      const nc = run.cardReward('normal')[0];
+      if (nc) { if (nc.canUpgrade()) nc.upgrade(); run.addCard(nc); }
+    }
+    toast('카드 3장이 변환되고 강화되었다.');
+  } else if (id === 'tinyHouse') {
+    run.gainGold(50);
+    run.gainMaxHp(5);
+    run.addPotion(run.randomPotion());
+    run.upgradeRandom((c) => c.canUpgrade(), 1);
+    const cards = run.cardReward('normal');
+    saveRun(run);
+    showRewards([{ type: 'card', cards }], () => goMap());
+    return true;
+  }
+  saveRun(run);
+  return true;
 }
 
 // ============================================================
@@ -768,7 +825,7 @@ function rewardRow(rw, idx, taken, rebuild) {
     const d = RELICS[rw.id];
     if (!d) return null;
     row.innerHTML = `<div class="relic-big">${relicIcon(d, 24)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div>`;
-    row.addEventListener('click', () => { SFX.relic(); run.addRelic(rw.id); take(); });
+    row.addEventListener('click', async () => { await gainRelic(rw.id); take(); });
 
   } else if (rw.type === 'card') {
     row.innerHTML = `<div class="relic-big" style="border-color:#8ad0ff">${svgIcon('book', { size: 22, color: '#8ad0ff' })}</div><span>카드 보상 (${rw.cards.length}장 중 택 1)</span>`;
@@ -817,10 +874,9 @@ function afterBoss() {
       const d = RELICS[id];
       const row = el('button', { class: 'reward-row' });
       row.innerHTML = `<div class="relic-big" style="border-color:#b04aff">${relicIcon(d, 24)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div>`;
-      row.addEventListener('click', () => {
-        SFX.relic();
-        run.addRelic(id);
+      row.addEventListener('click', async () => {
         closeModal();
+        await gainRelic(id);
         nextAct();
       });
       box.appendChild(row);
@@ -880,7 +936,7 @@ function showRest() {
   if (run.hasRelic('shovel')) opts.push({
     icon: 'hammer', color: '#e8c34a', label: '파헤치기',
     desc: '유물을 하나 얻습니다.',
-    act: () => { const id = run.relicReward(); if (id) { run.addRelic(id); SFX.relic(); finishRest(`${RELICS[id].name} 획득!`); } },
+    act: async () => { const id = run.relicReward(); if (id) { await gainRelic(id); finishRest(`${RELICS[id].name} 획득!`); } },
   });
   const girya = run.relicObj('girya');
   if (girya && girya.counter < 3) opts.push({
@@ -999,9 +1055,11 @@ function showShop() {
         const d = RELICS[it.id];
         const row = el('button', { class: 'reward-row' });
         row.innerHTML = `<div class="relic-big">${relicIcon(d, 24)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.price}G</span>`;
-        row.addEventListener('click', () => {
+        row.addEventListener('click', async () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
-          run.spendGold(it.price); run.addRelic(it.id); it.sold = true; SFX.relic(); rebuild();
+          run.spendGold(it.price); it.sold = true;
+          await gainRelic(it.id);
+          rebuild();
         });
         box.appendChild(row);
       });

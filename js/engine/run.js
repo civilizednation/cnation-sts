@@ -48,7 +48,7 @@ export class Run {
     this.potions = [null, null, null];
     this.potionSlots = 3;
     this.gold = 99;
-    this.floor = 0;
+    this.floor = 1;
     this.act = 1;
     this.flags = {};
     this.cardRarityBonus = 0;   // 희귀 카드 등장 보정
@@ -345,6 +345,7 @@ export class Run {
   advanceAct() {
     if (this.act >= 3) return false;
     this.buildAct(this.act + 1);
+    this.floor = this.actInfo.start;      // 다음 막 시작 층
     this.player.hp = this.player.maxHp;   // 중간 보스 클리어 → 체력 완전 회복
     return true;
   }
