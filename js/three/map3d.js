@@ -124,24 +124,50 @@ function buildIcon(type) {
       // 물음표는 정면을 유지 (회전시키면 옆면이 되어 안 읽힌다)
       break;
     }
-    case 'rest': {             // 모닥불
-      [-1, 1].forEach((sd) => {
-        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.8, 5), M(0x6b4a2a, { metal: 0 }));
-        log.position.set(sd * 0.12, -0.28, 0);
-        log.rotation.z = sd * 0.5;
-        log.rotation.x = 0.25;
+    case 'rest': {             // 모닥불 : 장작 위로 솟는 세 갈래 불꽃
+      const woodM = M(0x6b4a2a, { metal: 0, rough: 1 });
+      // 장작 3개를 삼각으로 기대어 쌓는다
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + 0.4;
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.62, 5), woodM);
+        log.position.set(Math.cos(a) * 0.16, -0.36, Math.sin(a) * 0.16);
+        log.rotation.set(Math.cos(a) * 0.42, 0, -Math.sin(a) * 0.42);
         g.add(log);
+      }
+      // 잉걸불
+      const ember = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6),
+        M(0xff6a20, { emissive: 0xff5010, ei: 2.4, rough: 0.5 }));
+      ember.scale.set(1, 0.45, 1);
+      ember.position.y = -0.4;
+      g.add(ember);
+
+      // 불꽃 세 갈래 — 가운데가 가장 높고 양옆이 바깥으로 기울어진다
+      const outerM = M(0xff8a30, { emissive: 0xff5a10, ei: 2.0, rough: 0.3 });
+      const innerM = M(0xffe07a, { emissive: 0xffc040, ei: 2.6, rough: 0.25 });
+      const tongues = [
+        { x: -0.19, y: -0.06, h: 0.56, r: 0.15, tilt: 0.40 },
+        { x: 0.00, y: 0.10, h: 0.86, r: 0.20, tilt: 0.00 },
+        { x: 0.19, y: -0.06, h: 0.56, r: 0.15, tilt: -0.40 },
+      ];
+      const flames = [];
+      tongues.forEach((t, i) => {
+        const fl = new THREE.Group();
+        const outer = new THREE.Mesh(new THREE.ConeGeometry(t.r, t.h, 6), outerM);
+        fl.add(outer);
+        const core = new THREE.Mesh(new THREE.ConeGeometry(t.r * 0.5, t.h * 0.55, 5), innerM);
+        core.position.y = -t.h * 0.16;
+        fl.add(core);
+        fl.position.set(t.x, t.y, i === 1 ? 0 : 0.03);
+        fl.rotation.z = t.tilt;
+        fl.userData.ph = i * 1.3;
+        g.add(fl);
+        flames.push(fl);
       });
-      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.72, 6), M(0xffa040, { emissive: 0xff6a20, ei: 1.6, rough: 0.3 }));
-      flame.position.y = 0.18;
-      g.add(flame);
-      const inner = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 5), M(0xfff0a0, { emissive: 0xffd060, ei: 2.2 }));
-      inner.position.y = 0.12;
-      g.add(inner);
-      const lt = new THREE.PointLight(0xff8a3a, 1.6, 4);
-      lt.position.set(0, 0.3, 0.4);
+      const lt = new THREE.PointLight(0xff8a3a, 1.8, 4.2);
+      lt.position.set(0, 0.25, 0.4);
       g.add(lt);
-      g.userData.flame = flame;
+      g.userData.flame = flames[1];
+      g.userData.flames = flames;
       break;
     }
     case 'shop': {             // 노점 : 줄무늬 차양 + 판매대 + 진열품
@@ -188,17 +214,77 @@ function buildIcon(type) {
       }
       break;
     }
-    case 'treasure': {         // 보물 상자
-      const box = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.46, 0.6), M(0x7a4f22, { metal: 0.1 }));
-      box.position.y = -0.12;
-      g.add(box);
-      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.86, 10, 1, false, 0, Math.PI), M(0x8a5a28, { metal: 0.15 }));
+    case 'treasure': {         // 금빛 보물 상자 : 황금 몸통 + 밝은 금테 + 보석 장식
+      const gold = M(0xf5cf5a, { metal: 0.95, rough: 0.16, emissive: 0x8a6414, ei: 0.9 });
+      const bright = M(0xfff0a8, { metal: 0.85, rough: 0.12, emissive: 0xc09a2a, ei: 1.3 });
+      const deep = M(0xb8891f, { metal: 0.92, rough: 0.3, emissive: 0x4a3408, ei: 0.7 });
+
+      // 몸통 (황금) + 안쪽 패널
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.44, 0.6), gold);
+      body.position.y = -0.15;
+      g.add(body);
+      [-1, 1].forEach((sz) => {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.26, 0.02), deep);
+        panel.position.set(0, -0.15, sz * 0.305);
+        g.add(panel);
+      });
+      // 세로 금띠
+      [-0.3, 0.3].forEach((x) => {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.48, 0.64), bright);
+        band.position.set(x, -0.15, 0);
+        g.add(band);
+      });
+      // 상자 테두리
+      const rim = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.08, 0.67), bright);
+      rim.position.y = 0.08;
+      g.add(rim);
+
+      // 반원 뚜껑 (황금) + 금테 후프
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.88, 14, 1, false, 0, Math.PI), gold);
       lid.rotation.z = Math.PI / 2;
       lid.position.y = 0.12;
       g.add(lid);
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.1, 0.64), M(0xe8c34a, { metal: 0.85, rough: 0.25, emissive: 0x604818, ei: 0.5 }));
-      band.position.y = -0.1;
-      g.add(band);
+      [-0.3, 0, 0.3].forEach((x, i) => {
+        const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.308, i === 1 ? 0.028 : 0.04, 5, 14, Math.PI),
+          i === 1 ? deep : bright);
+        hoop.rotation.y = Math.PI / 2;
+        hoop.position.set(x, 0.12, 0);
+        g.add(hoop);
+      });
+      // 뚜껑 위 보석 3알
+      [[-0.22, 0x60e0ff], [0, 0xff6ab0], [0.22, 0x9aff8a]].forEach(([x, col]) => {
+        const j = new THREE.Mesh(new THREE.OctahedronGeometry(0.058, 0),
+          M(col, { emissive: col, ei: 1.8, metal: 0.4, rough: 0.12 }));
+        j.position.set(x, 0.41, 0);
+        g.add(j);
+      });
+
+      // 자물쇠판 + 큰 보석
+      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.06), bright);
+      lock.position.set(0, 0.0, 0.32);
+      g.add(lock);
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.095, 0),
+        M(0xff4a7a, { emissive: 0xd01050, ei: 2.2, metal: 0.4, rough: 0.12 }));
+      gem.position.set(0, 0.01, 0.38);
+      g.add(gem);
+
+      // 모서리 금장 못
+      [-1, 1].forEach((sx) => [-1, 1].forEach((sz) => {
+        const stud = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), bright);
+        stud.position.set(sx * 0.41, -0.32, sz * 0.285);
+        g.add(stud);
+      }));
+
+      // 뚜껑 틈에서 새어 나오는 빛
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.14),
+        new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.5,
+          blending: THREE.AdditiveBlending, depthWrite: false }));
+      glow.position.set(0, 0.085, 0.345);
+      g.add(glow);
+      const lt = new THREE.PointLight(0xffd070, 1.1, 3);
+      lt.position.set(0, 0.35, 0.5);
+      g.add(lt);
+      g.userData.glow = glow;
       break;
     }
     case 'boss': {             // 왕관을 쓴 어둠의 결정
@@ -538,7 +624,14 @@ function loop() {
     const ic = n.icon && n.icon.userData;
     if (ic && ic.spin) ic.spin.rotation.y += dt * 1.1;
     if (ic && ic.ring) ic.ring.rotation.z += dt * 0.8;
-    if (ic && ic.flame) ic.flame.scale.setScalar(1 + Math.sin(t * 6 + off) * 0.12);
+    if (ic && ic.flames) {
+      // 세 갈래 불꽃이 각자 다른 박자로 일렁인다
+      ic.flames.forEach((fl) => {
+        const k = 1 + Math.sin(t * 6.5 + fl.userData.ph + off) * 0.16;
+        fl.scale.set(1 - (k - 1) * 0.5, k, 1);
+      });
+    } else if (ic && ic.flame) ic.flame.scale.setScalar(1 + Math.sin(t * 6 + off) * 0.12);
+    if (ic && ic.glow) ic.glow.material.opacity = 0.4 + Math.sin(t * 2.6 + off) * 0.18;
   });
   scene.children.forEach((o) => {
     if (o.userData.pulse) o.material.opacity = 0.75 + Math.sin(t * 5) * 0.25;
