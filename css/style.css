@@ -162,19 +162,20 @@ html, body {
 
 /* ---------- 지도 ---------- */
 .map-legend {
-  flex: 0 0 auto; display: flex; gap: 3px; justify-content: center; overflow-x: auto; padding: 6px 4px;
+  flex: 0 0 auto; display: flex; gap: 4px; justify-content: center; overflow-x: auto; padding: 5px 4px 6px;
   background: rgba(14,11,20,.92); border-bottom: 1px solid #2a2338; scrollbar-width: none;
 }
 .map-legend::-webkit-scrollbar { display: none; }
 .legend-item {
-  display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
-  padding: 1px 6px 1px 3px; border-radius: 999px; background: rgba(30,24,42,.9);
-  border: 1px solid #453a5a; font-size: 10px; white-space: nowrap;
+  /* 아이콘은 위, 설명글은 아래로 두 줄 배치 */
+  display: flex; flex-direction: column; align-items: center; gap: 1px; flex: 0 0 auto;
+  padding: 3px 7px 4px; border-radius: 10px; background: rgba(30,24,42,.9);
+  border: 1px solid #453a5a; font-size: 10px; line-height: 1.15; white-space: nowrap;
 }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 6px currentColor; background: currentColor; }
 /* 지도에서 쓰는 실제 3D 아이콘을 축소해 붙인 범례 마크 */
 .legend-icon {
-  width: 24px; height: 24px; flex: 0 0 auto; display: block;
+  width: 29px; height: 29px; flex: 0 0 auto; display: block;
   object-fit: contain; filter: drop-shadow(0 0 3px rgba(0,0,0,.6));
 }
 .map3d-wrap {

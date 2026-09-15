@@ -341,7 +341,7 @@ let legendThumbs = null;   // 지도 3D 아이콘을 구운 썸네일 캐시
 function renderLegend() {
   const box = $('#map-legend');
   if (!box) return;
-  if (!legendThumbs) legendThumbs = M3.iconThumbs(LEGEND.map(([t]) => t), 64) || {};
+  if (!legendThumbs) legendThumbs = M3.iconThumbs(LEGEND.map(([t]) => t), 80) || {};
   box.innerHTML = '';
   LEGEND.forEach(([type, label]) => {
     const color = ROOM_COLOR[type];
