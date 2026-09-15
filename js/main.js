@@ -53,13 +53,55 @@ function openModal(builder, opts = {}) {
   const box = $('#modal-box');
   box.innerHTML = '';
   builder(box);
+  // 보상·모닥불·상점 등에서 판단에 필요한 내 상태(체력·골드·물약칸)를 항상 띄워 준다
+  renderModalStatus(opts.focus);
   $('#scr-modal').hidden = false;
   modalStack.push(builder);
 }
 function closeModal() {
   $('#scr-modal').hidden = true;
   $('#modal-box').innerHTML = '';
+  const st = $('#modal-status');
+  if (st) { st.hidden = true; st.innerHTML = ''; }
   modalStack = [];
+}
+
+/**
+ * 모달 상단 상태 띠 — 체력 / 골드 / 물약 슬롯(빈 칸 포함).
+ * focus: 'hp' | 'potion' 을 주면 해당 항목을 강조한다.
+ */
+function renderModalStatus(focus) {
+  const bar = $('#modal-status');
+  const run = G.run;
+  if (!bar) return;
+  if (!run) { bar.hidden = true; bar.innerHTML = ''; return; }
+
+  const p = run.player;
+  const pct = clamp(p.hp / Math.max(1, p.maxHp), 0, 1) * 100;
+  const low = p.hp / Math.max(1, p.maxHp) <= 0.3;
+  const free = run.potions.slice(0, run.potionSlots).filter((x) => !x).length;
+
+  let slots = '';
+  for (let i = 0; i < run.potionSlots; i++) {
+    const pot = run.potions[i];
+    const d = pot ? POTIONS[pot.id] : null;
+    slots += d
+      ? `<span class="ms-slot filled" style="border-color:${d.color}" title="${d.name}">${svgIcon('potion', { size: 15, color: d.color })}</span>`
+      : `<span class="ms-slot"></span>`;
+  }
+
+  bar.innerHTML = `
+    <div class="ms-hp${focus === 'hp' ? ' focus' : ''}${low ? ' low' : ''}">
+      <span class="ms-label">체력</span>
+      <div class="hpbar"><i style="width:${pct}%"></i><b>${p.hp} / ${p.maxHp}</b></div>
+    </div>
+    <div class="ms-gold">${run.gold}G</div>
+    <div class="ms-potion${focus === 'potion' ? ' focus' : ''}">
+      <span class="ms-label">물약</span>
+      <span class="ms-slots">${slots}</span>
+      <span class="ms-free${free === 0 ? ' none' : ''}">${free === 0 ? '가득참' : `빈칸 ${free}`}</span>
+    </div>`;
+  bar.hidden = false;
 }
 function modalTitle(text) { return el('h2', { class: 'modal-title', text }); }
 function modalText(text) { return el('p', { class: 'modal-text', text }); }
@@ -954,6 +996,7 @@ function endBattle(B) {
 
 function showRewards(rewards, done) {
   const taken = new Set();
+  const hasPotion = rewards.some((rw) => rw.type === 'potion');
   const build = () => {
     openModal((box) => {
       box.append(modalTitle('보상'));
@@ -964,7 +1007,7 @@ function showRewards(rewards, done) {
       });
       box.append(list, el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '계속', onclick: () => { SFX.tap(); closeModal(); done(); } })));
-    });
+    }, { focus: hasPotion ? 'potion' : null });
   };
   build();
 }
@@ -1077,7 +1120,8 @@ function showRest() {
   const opts = [];
   if (!run.hasRelic('coffeeDripper')) opts.push({
     icon: 'flame', color: '#ff9a4a', label: '휴식',
-    desc: `체력을 ${restHeal(run)} 회복합니다.`,
+    desc: `체력을 ${restHeal(run)} 회복합니다. `
+      + `(${run.player.hp} → ${Math.min(run.player.maxHp, run.player.hp + restHeal(run))} / ${run.player.maxHp})`,
     act: () => { SFX.campfire(); run.healPlayer(restHeal(run)); run.flags.teaSet = true; finishRest('편안히 쉬었다.'); },
   });
   if (!run.hasRelic('fusionHammer')) opts.push({
@@ -1117,7 +1161,7 @@ function showRest() {
       row.addEventListener('click', () => { SFX.tap(); o.act(); });
       box.appendChild(row);
     });
-  });
+  }, { focus: 'hp' });
 }
 
 function restHeal(run) {
@@ -1273,7 +1317,7 @@ function showShop() {
       }
       box.append(el('div', { class: 'modal-actions' },
         el('button', { class: 'btn', text: '나가기', onclick: () => { SFX.tap(); run.flags.shopRemoved = false; closeModal(); saveRun(run); goMap(); } })));
-    });
+    }, { focus: 'potion' });
   };
   rebuild();
 }
@@ -1326,11 +1370,11 @@ function showEvent() {
           b2.append(modalTitle(ev.name), modalText(res),
             el('div', { class: 'modal-actions' },
               el('button', { class: 'btn gold', text: '계속', onclick: () => { closeModal(); goMap(); } })));
-        });
+        }, { focus: 'hp' });
       });
       box.appendChild(row);
     });
-  });
+  }, { focus: 'hp' });
 }
 
 // ============================================================
