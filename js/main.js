@@ -268,15 +268,20 @@ const LEGEND = [
   ['rest', '모닥불'], ['shop', '상점'], ['treasure', '보물'], ['boss', '보스'],
 ];
 
+let legendThumbs = null;   // 지도 3D 아이콘을 구운 썸네일 캐시
+
 function renderLegend() {
   const box = $('#map-legend');
   if (!box) return;
+  if (!legendThumbs) legendThumbs = M3.iconThumbs(LEGEND.map(([t]) => t), 48) || {};
   box.innerHTML = '';
   LEGEND.forEach(([type, label]) => {
     const color = ROOM_COLOR[type];
-    box.appendChild(el('div', { class: 'legend-item' },
-      el('i', { class: 'legend-dot', style: { color } }),
-      el('span', { text: label })));
+    // 범례도 지도에서 쓰는 실제 3D 아이콘을 축소해 보여준다 (썸네일 실패 시 색 점)
+    const mark = legendThumbs[type]
+      ? el('img', { class: 'legend-icon', src: legendThumbs[type], alt: label })
+      : el('i', { class: 'legend-dot', style: { color } });
+    box.appendChild(el('div', { class: 'legend-item' }, mark, el('span', { text: label })));
   });
 }
 

@@ -177,6 +177,51 @@ function buildIcon(type) {
   return g;
 }
 
+/**
+ * 범례용 아이콘 썸네일 — 지도에 쓰이는 실제 3D 아이콘을 작게 구워 PNG 데이터 URL 로 돌려준다.
+ * 지도 렌더러와 별개의 일회용 컨텍스트를 사용하므로 지도 화면 밖에서도 호출 가능.
+ */
+export function iconThumbs(types, px = 44) {
+  const out = {};
+  let r = null;
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = px;
+    r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    r.setPixelRatio(1);
+    r.setSize(px, px, false);
+    r.setClearColor(0x000000, 0);
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(0xa0b0e0, 0x342a44, 1.35));
+    const key = new THREE.DirectionalLight(0xffe0b0, 1.7);
+    key.position.set(4, 8, 8);
+    sc.add(key);
+    const rim = new THREE.DirectionalLight(0x9a7aff, 0.8);
+    rim.position.set(-5, 3, -4);
+    sc.add(rim);
+    sc.add(new THREE.AmbientLight(0xd0c8f0, 0.7));
+    const cam = new THREE.PerspectiveCamera(38, 1, 0.1, 60);
+    types.forEach((type) => {
+      const g = buildIcon(type);
+      sc.add(g);
+      const sph = new THREE.Box3().setFromObject(g).getBoundingSphere(new THREE.Sphere());
+      const d = (sph.radius / Math.tan((38 * Math.PI / 180) / 2)) * 1.1;
+      cam.position.set(sph.center.x + d * 0.10, sph.center.y + d * 0.14, sph.center.z + d);
+      cam.lookAt(sph.center);
+      r.render(sc, cam);
+      out[type] = r.domElement.toDataURL('image/png');
+      sc.remove(g);
+      g.traverse((o) => {
+        if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); }
+      });
+    });
+  } catch (e) {
+    /* WebGL 사용 불가 — 호출측에서 색 점으로 대체 */
+  }
+  if (r) r.dispose();
+  return out;
+}
+
 function buildPedestal(color, big) {
   const g = new THREE.Group();
   const r = big ? 0.95 : 0.72;
@@ -191,15 +236,15 @@ function buildPedestal(color, big) {
   return g;
 }
 
-/** 위로 향하는 화살표 (진입 가능 표시) */
-function buildArrow(color) {
+/** 경로 위에 얹는 진행 방향 화살촉 (현재 위치 → 갈 수 있는 방) */
+function buildPathArrow(color) {
   const g = new THREE.Group();
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.34, 4), new THREE.MeshBasicMaterial({ color }));
-  cone.position.y = 0.17;
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.46, 4), new THREE.MeshBasicMaterial({ color }));
   g.add(cone);
-  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.22, 0.09), new THREE.MeshBasicMaterial({ color }));
-  shaft.position.y = -0.06;
-  g.add(shaft);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.3, 4),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55 }));
+  tail.position.y = -0.42;
+  g.add(tail);
   return g;
 }
 
@@ -237,8 +282,8 @@ function dimGroup(group, opacity, gray) {
     if (gray && o.material.color) {
       const hsl = { h: 0, s: 0, l: 0 };
       o.material.color.getHSL(hsl);
-      o.material.color.setHSL(hsl.h, hsl.s * 0.25, hsl.l * 0.55);
-      if (o.material.emissive) o.material.emissive.multiplyScalar(0.2);
+      o.material.color.setHSL(hsl.h, hsl.s * 0.62, hsl.l * 0.82);
+      if (o.material.emissive) o.material.emissive.multiplyScalar(0.55);
     }
   });
 }
@@ -275,22 +320,17 @@ export function buildMap(run, onSelect) {
       grp.scale.setScalar(0.82);
 
       // 상태별 시각 구분 : 현재 위치 / 갈 수 있는 길 / 갈 수 없는 길
-      let arrow = null, here = null;
+      let here = null;
       if (isCurrent) {
         here = buildHereMarker();
         grp.add(here);
-      } else if (isAvail) {
-        arrow = buildArrow(a.fly ? 0x8ad0ff : 0xffd24a);
-        arrow.position.y = 1.45;
-        grp.add(arrow);
-      } else if (node.visited) {
-        dimGroup(grp, 0.3, true);
-      } else {
-        dimGroup(grp, 0.42, true);   // 지금은 갈 수 없는 길
+      } else if (!isAvail) {
+        // 갈 수 없는 길 — 완전히 묻히지 않도록 중간 밝기로만 낮춘다
+        dimGroup(grp, node.visited ? 0.62 : 0.72, true);
       }
       scene.add(grp);
       nodeMeshes.push({
-        group: grp, icon, arrow, here, r, c, type: node.type, avail: isAvail, fly: !!(a && a.fly),
+        group: grp, icon, here, r, c, type: node.type, avail: isAvail, fly: !!(a && a.fly),
         visited: node.visited, current: isCurrent,
         select: { row: r, col: c, fly: !!(a && a.fly) },
       });
@@ -306,15 +346,13 @@ export function buildMap(run, onSelect) {
   bossGrp.add(bossIcon);
   bossGrp.position.set(0, rows * ROW_GAP + 0.6, 0);
   bossGrp.scale.setScalar(0.95);
-  let bossArrow = null;
-  if (bossAvail) { bossArrow = buildArrow(0xffd24a); bossArrow.position.y = 1.9; bossGrp.add(bossArrow); }
-  else dimGroup(bossGrp, 0.5, true);
+  if (!bossAvail) dimGroup(bossGrp, 0.78, true);
   scene.add(bossGrp);
-  nodeMeshes.push({ group: bossGrp, icon: bossIcon, arrow: bossArrow, r: rows, c: 0, type: 'boss', avail: bossAvail, select: { boss: true } });
+  nodeMeshes.push({ group: bossGrp, icon: bossIcon, r: rows, c: 0, type: 'boss', avail: bossAvail, select: { boss: true } });
 
   // 연결선
-  const dullMat = new THREE.MeshBasicMaterial({ color: 0x4a4060, transparent: true, opacity: 0.32 });
-  const doneMat = new THREE.MeshBasicMaterial({ color: 0xc8a24a, transparent: true, opacity: 0.6 });
+  const dullMat = new THREE.MeshBasicMaterial({ color: 0x6f6394, transparent: true, opacity: 0.55 });
+  const doneMat = new THREE.MeshBasicMaterial({ color: 0xd2ae5c, transparent: true, opacity: 0.75 });
   const openMat = new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 1 });
   const addLink = (a, b, kind) => {
     const dir = new THREE.Vector3().subVectors(b, a);
@@ -327,8 +365,24 @@ export function buildMap(run, onSelect) {
     mesh.userData.isLink = true;
     if (kind === 'open') mesh.userData.pulse = true;
     scene.add(mesh);
+    // 갈 수 있는 길에는 진행 방향 화살표를 경로 위에 얹는다 (노드 머리 위 화살표 대체)
+    if (kind === 'open') {
+      const ar = buildPathArrow(0xffd24a);
+      ar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+      ar.userData.isLink = true;
+      ar.userData.flow = { a: a.clone(), b: b.clone() };
+      scene.add(ar);
+    }
   };
   const cur = run.mapPos;
+  // 아직 첫 발을 딛지 않았다면 바닥에서 올라오는 진입 화살표를 그린다
+  if (!cur) {
+    run.map[0].forEach((_, c) => {
+      if (!availMap.has(`0,${c}`)) return;
+      const to = posOf(0, c, run.map[0].length).clone().add(new THREE.Vector3(0, -0.85, 0));
+      addLink(to.clone().add(new THREE.Vector3(0, -1.6, 0)), to, 'open');
+    });
+  }
   run.map.forEach((row, r) => {
     if (r >= rows - 1) return;
     row.forEach((node, c) => {
@@ -429,7 +483,6 @@ function loop() {
       n.group.rotation.y = Math.sin(t * 0.35 + off) * 0.18;
       if (n.baseScale === undefined) n.baseScale = n.group.scale.x;
     }
-    if (n.arrow) { n.arrow.position.y = (n.arrowY !== undefined ? n.arrowY : (n.arrowY = n.arrow.position.y)) + Math.sin(t * 4 + off) * 0.16; }
     if (n.here) {
       n.here.rotation.y += dt * 0.5;
       const r2 = n.here.userData.ring2;
@@ -440,7 +493,14 @@ function loop() {
     if (ic && ic.ring) ic.ring.rotation.z += dt * 0.8;
     if (ic && ic.flame) ic.flame.scale.setScalar(1 + Math.sin(t * 6 + off) * 0.12);
   });
-  scene.children.forEach((o) => { if (o.userData.pulse) o.material.opacity = 0.75 + Math.sin(t * 5) * 0.25; });
+  scene.children.forEach((o) => {
+    if (o.userData.pulse) o.material.opacity = 0.75 + Math.sin(t * 5) * 0.25;
+    const fl = o.userData.flow;
+    if (fl) {
+      const k = 0.46 + Math.sin(t * 2.2) * 0.14;
+      o.position.copy(fl.a).lerp(fl.b, k);
+    }
+  });
   renderer.render(scene, camera);
 }
 
