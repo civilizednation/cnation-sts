@@ -191,7 +191,7 @@ def({ id: 'darkness', name: '어둠', en: 'Darkness', type: S, rarity: RARITY.UN
   text: D((c) => `암흑 구체를 1개 충전합니다.${c.upgraded ? ' 모든 암흑 구체의 패시브를 발동합니다.' : ''}`),
   play: (x) => {
     x.B.channel('dark');
-    if (x.c.upgraded) x.B.orbs.filter((o) => o.type === 'dark').forEach((o) => x.B.orbEffect(o, false));
+    if (x.c.upgraded) x.B.orbs.forEach((o, i) => { if (o.type === 'dark') x.B.orbEffect(o, false, true, i); });
   } });
 
 def({ id: 'defragment', name: '조각 모음', en: 'Defragment', type: P, rarity: RARITY.UNCOMMON, color: B_, cost: 1, target: SELF,

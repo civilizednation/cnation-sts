@@ -16,7 +16,10 @@
   --text-dim: #9a92a8;
   --hp: #c0392b;
   --hp-bg: #3a1616;
+  --hp-me: #2fbf7a;
+  --hp-me-bg: #10382a;
   --block: #6ab0e8;
+  --font: 'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --card-w: 88px;
@@ -27,7 +30,7 @@
 html, body {
   margin: 0; padding: 0; height: 100%; overflow: hidden;
   background: var(--bg); color: var(--text);
-  font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font);
   font-size: 14px; line-height: 1.45;
   overscroll-behavior: none; touch-action: manipulation;
   user-select: none; -webkit-user-select: none;
@@ -73,7 +76,7 @@ html, body {
 }
 .title-wrap { position: relative; text-align: center; padding: 24px; }
 .game-title {
-  font-family: Cinzel, serif; margin: 0 0 6px; line-height: .96;
+  font-family: var(--font); margin: 0 0 6px; line-height: .96;
   display: flex; flex-direction: column; align-items: center;
   text-shadow: 0 0 22px rgba(255,150,60,.5), 0 3px 0 #2a1508;
 }
@@ -83,7 +86,7 @@ html, body {
 .version-badge {
   display: inline-block; margin: -22px 0 26px; padding: 3px 12px; border-radius: 999px;
   background: rgba(24,19,32,.85); border: 1px solid #453a5a;
-  color: #9a92a8; font-size: 11.5px; letter-spacing: .4px; font-family: Cinzel, serif;
+  color: #9a92a8; font-size: 11.5px; letter-spacing: .4px; font-family: var(--font);
 }
 .version-badge b { color: var(--gold); font-weight: 700; }
 .title-menu { display: flex; flex-direction: column; gap: 12px; align-items: center; }
@@ -95,13 +98,13 @@ html, body {
   background: linear-gradient(rgba(14,11,20,.96), rgba(14,11,20,.72));
   border-bottom: 1px solid #2a2338; flex: 0 0 auto; min-height: 46px;
 }
-.tb-floor { font-family: Cinzel, serif; font-size: 13px; color: var(--gold); white-space: nowrap; }
+.tb-floor { font-family: var(--font); font-size: 13px; color: var(--gold); white-space: nowrap; }
 .tb-hp { flex: 1 1 auto; min-width: 90px; }
 .hpbar {
-  position: relative; height: 21px; background: var(--hp-bg);
-  border: 1px solid #5a2222; border-radius: 4px; overflow: hidden;
+  position: relative; height: 21px; background: var(--hp-me-bg);
+  border: 1px solid #1f6b4a; border-radius: 4px; overflow: hidden;
 }
-.hpbar > i { display: block; height: 100%; background: linear-gradient(#e05a44, #a02a1c); transition: width .3s; }
+.hpbar > i { display: block; height: 100%; background: linear-gradient(#5ce39a, #1f9e63); transition: width .3s; }
 .hpbar > b {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 11.5px; font-weight: 700; text-shadow: 0 1px 2px #000; letter-spacing: .3px;
@@ -140,7 +143,7 @@ html, body {
 #map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .map-title-3d {
   position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-  font-family: Cinzel, serif; color: var(--gold); font-size: 14px; text-shadow: 0 2px 6px #000;
+  font-family: var(--font); color: var(--gold); font-size: 14px; text-shadow: 0 2px 6px #000;
   pointer-events: none; white-space: nowrap;
 }
 .map-hint {
@@ -164,7 +167,7 @@ html, body {
 .map-node.current { border-color: #fff; box-shadow: 0 0 14px #fff8; }
 .map-node.boss { width: 70px; height: 70px; border-color: #c03a3a; color: #ff7a5a; }
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-.map-title { text-align: center; font-family: Cinzel, serif; color: var(--gold); padding: 6px; font-size: 15px; }
+.map-title { text-align: center; font-family: var(--font); color: var(--gold); padding: 6px; font-size: 15px; }
 .mapfoot { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 8px; border-top: 1px solid #2a2338; background: rgba(14,11,20,.9); }
 .mapfoot .potion-row { flex: 0 1 auto; }
 
@@ -182,7 +185,8 @@ html, body {
 /* 적/플레이어 상태 오버레이 */
 .unit {
   position: absolute; transform: translate(-50%, -100%);
-  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 112px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: max-content; max-width: 240px;
 }
 .unit.targetable::after {
   content: ''; position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);
@@ -191,7 +195,9 @@ html, body {
 }
 @keyframes bob { 0%,100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 5px); } }
 .unit-name { font-size: 10.5px; color: #ded6e8; text-shadow: 0 1px 3px #000; white-space: nowrap; }
-.unit-hp { width: 100%; height: 14px; background: #2a1212; border: 1px solid #5a2222; border-radius: 3px; position: relative; overflow: hidden; }
+.unit-hp { width: 100%; height: 14px; background: #2a1212; border: 1px solid #5a2222; border-radius: 3px; position: relative; overflow: hidden; transition: width .25s; }
+.unit-hp.me { background: var(--hp-me-bg); border-color: #1f6b4a; }
+.unit-hp.me > i { background: linear-gradient(#5ce39a, #1f9e63); }
 .unit-hp > i { display: block; height: 100%; background: linear-gradient(#d84f3a, #8a1f14); transition: width .25s; }
 .unit-hp > b { position: absolute; inset: 0; font-size: 10px; line-height: 1; display: flex; align-items: center; justify-content: center; text-shadow: 0 1px 2px #000; font-weight: 700; }
 .unit-block {
@@ -215,6 +221,18 @@ html, body {
 .pw.buff { border-color: #7a6a2a; color: #ffe08a; }
 .pw svg { width: 12px; height: 12px; }
 
+/* 몬스터 본체 탭 영역 */
+.unit-hit {
+  position: absolute; border-radius: 50%; pointer-events: auto;
+  background: transparent; border: 2px solid transparent; transition: background .15s, border-color .15s;
+}
+.unit-hit.targetable {
+  border-color: rgba(255,90,74,.85);
+  background: radial-gradient(circle, rgba(255,90,74,.22), rgba(255,90,74,.05) 65%, transparent 72%);
+  animation: hitPulse 1s ease-in-out infinite;
+}
+@keyframes hitPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
 /* 전투 로그 */
 .battle-log {
   position: absolute; left: 6px; bottom: 40px; max-width: 60%;
@@ -224,7 +242,7 @@ html, body {
 
 /* 데미지 숫자 */
 .pop {
-  position: absolute; font-family: Cinzel, serif; font-weight: 700; font-size: 24px;
+  position: absolute; font-family: var(--font); font-weight: 700; font-size: 24px;
   text-shadow: 0 2px 6px #000, 0 0 12px currentColor; transform: translate(-50%, -50%);
   animation: popup 1s ease-out forwards; pointer-events: none;
 }
@@ -277,11 +295,11 @@ html, body {
 .card-cost svg { width: 100%; height: 100%; }
 .card-cost span {
   position: absolute; inset: 0; display: grid; place-items: center;
-  font-family: Cinzel, serif; font-weight: 700; font-size: 14px; color: #fff; text-shadow: 0 1px 3px #000;
+  font-family: var(--font); font-weight: 700; font-size: 14px; color: #fff; text-shadow: 0 1px 3px #000;
 }
 .card-cost.cost-changed span { color: #7cff9a; }
 .card-body { flex: 1 1 auto; padding: 4px 4px 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.card-desc { font-size: 8px; line-height: 1.28; text-align: center; color: #e2dcea; word-break: keep-all; }
+.card-desc { font-size: 9.2px; line-height: 1.3; text-align: center; color: #e2dcea; word-break: keep-all; }
 .card-desc .num { color: #fff; font-weight: 700; }
 .card-desc .num.buffed { color: #7cff9a; text-shadow: 0 0 6px rgba(124,255,154,.7); }
 .card-desc .num.nerfed { color: #ff9a6a; text-shadow: 0 0 6px rgba(255,154,106,.6); }
@@ -293,8 +311,8 @@ html, body {
 .card-rar { width: 7px; height: 7px; transform: rotate(45deg); background: var(--c-rar); border: .5px solid rgba(0,0,0,.5); }
 .card.small { position: relative; width: 74px; height: 106px; }
 .card.big { position: relative; width: 150px; height: 214px; }
-.card.selected .card-desc { font-size: 8px; }
-.card.big .card-desc { font-size: 12.5px; }
+.card.selected .card-desc { font-size: 9.2px; }
+.card.big .card-desc { font-size: 14.4px; }
 .card.big .card-name { font-size: 15px; }
 .card.big .card-cost { width: 40px; height: 40px; }
 .card.big .card-cost span { font-size: 20px; }
@@ -309,7 +327,7 @@ html, body {
 .energy-orb svg { width: 100%; height: 100%; }
 .energy-orb span {
   position: absolute; inset: 0; display: grid; place-items: center;
-  font-family: Cinzel, serif; font-weight: 700; font-size: 16px; color: #fff; text-shadow: 0 1px 4px #000;
+  font-family: var(--font); font-weight: 700; font-size: 16px; color: #fff; text-shadow: 0 1px 4px #000;
 }
 .potion-row { flex: 1 1 auto; display: flex; gap: 6px; justify-content: center; }
 .potion-slot {
@@ -328,7 +346,7 @@ html, body {
   margin: auto; width: 100%; max-width: 460px; max-height: 100%; overflow-y: auto;
   padding: 16px 14px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 12px; align-items: center;
 }
-.modal-title { font-family: Cinzel, serif; font-size: 20px; color: var(--gold); text-align: center; margin: 4px 0; }
+.modal-title { font-family: var(--font); font-size: 20px; color: var(--gold); text-align: center; margin: 4px 0; }
 .modal-text { text-align: center; color: #cfc8d8; font-size: 13.5px; line-height: 1.6; white-space: pre-line; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
 .card-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
@@ -427,7 +445,7 @@ html, body {
 .upgrade-compare { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; }
 .uc-side { display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .uc-side .card.big { width: 132px; height: 190px; }
-.uc-side .card.big .card-desc { font-size: 10.5px; }
+.uc-side .card.big .card-desc { font-size: 12px; }
 .uc-side .card.big .card-name { font-size: 13px; }
 .uc-label { font-size: 11px; color: var(--text-dim); }
 .uc-label.up { color: #7cff9a; font-weight: 700; }
@@ -452,12 +470,12 @@ html, body {
 /* 작은 화면 대응 */
 @media (max-height: 700px) {
   :root { --card-w: 76px; --card-h: 108px; }
-  .card-desc { font-size: 7.4px; }
+  .card-desc { font-size: 8.5px; }
   .card-name { font-size: 9px; }
 }
 @media (min-width: 520px) {
   :root { --card-w: 100px; --card-h: 142px; }
-  .card-desc { font-size: 9.4px; }
+  .card-desc { font-size: 10.8px; }
   .card-name { font-size: 11.5px; }
 }
 

@@ -43,7 +43,9 @@ export class Battle {
     // 디펙트 : 구체
     this.channeledCount = { lightning: 0, frost: 0, dark: 0, plasma: 0 };
     this.orbs = [];
-    this.orbSlots = run.character && run.character.orbSlots ? run.character.orbSlots : 3;
+    // 구체 시스템은 디펙트 전용. 다른 캐릭터는 빈 슬롯도 표시하지 않는다.
+    this.usesOrbs = !!(run.character && run.character.orbSlots);
+    this.orbSlots = this.usesOrbs ? run.character.orbSlots : 3;
     // 와쳐 : 자세
     this.stance = 'neutral';
     this.firstCardThisTurn = true;
@@ -676,10 +678,12 @@ export class Battle {
    * 구체 효과. evokeIt=true 면 발동, false 면 턴 종료 패시브.
    * consume 은 연출에서 구체를 실제로 소모해 보일지 여부 (다중 시전 대응).
    */
-  orbEffect(orb, evokeIt, consume = true) {
+  orbEffect(orb, evokeIt, consume = true, orbIndex = 0) {
     const f = this.focus;
     const living = this.living();
-    const fire = (targets) => this.fx('orbFire', { type: orb.type, targets, evoke: !!evokeIt && consume });
+    const fire = (targets) => this.fx('orbFire', {
+      type: orb.type, targets, evoke: !!evokeIt && consume, index: orbIndex,
+    });
     switch (orb.type) {
       case 'lightning': {
         const dmg = (evokeIt ? 8 : 3) + f;
@@ -718,7 +722,7 @@ export class Battle {
   }
   /** 턴 종료 시 구체 패시브 */
   orbPassives() {
-    this.orbs.slice().forEach((o) => this.orbEffect(o, false));
+    this.orbs.slice().forEach((o, i) => this.orbEffect(o, false, true, i));
     this.render();
   }
   removeOrb(i = 0) { this.orbs.splice(i, 1); this.render(); }
@@ -849,7 +853,7 @@ export class Battle {
     this.ui.sfx && this.ui.sfx(this.encounter.kind === 'boss' ? 'boss' : 'battleStart');
     this.log(`전투 시작! (${this.enemies.map((e) => e.name).join(', ')})`);
     this.render();
-    await this.wait(500);
+    await this.wait(1000);
     await this.startPlayerTurn();
   }
 
@@ -969,7 +973,7 @@ export class Battle {
       this.tookDamageLastTurn = this.tookDamageThisTurn;
       this.tookDamageThisTurn = false;
       const loop = this.pow(a, 'loop');
-      if (loop > 0 && this.orbs[0]) for (let i = 0; i < loop; i++) this.orbEffect(this.orbs[0], false);
+      if (loop > 0 && this.orbs[0]) for (let i = 0; i < loop; i++) this.orbEffect(this.orbs[0], false, true, 0);
       const cai = this.pow(a, 'creativeAI');
       for (let i = 0; i < cai; i++) { const c = this.randomCardOfType(P); if (c) this.addCardToHand(c); }
       const hw = this.pow(a, 'helloWorld');
@@ -1129,7 +1133,7 @@ export class Battle {
         const ctx = { B: this, p: this.player, t: target && target.alive ? target : this.living()[0], c: card, x };
         await card.def.play(ctx);
       }
-      if (i === 0) await this.wait(120);
+      if (i === 0) await this.wait(240);
     }
 
     this.cardInPlay = null;
@@ -1273,7 +1277,7 @@ export class Battle {
     this.run.relicHook('onTurnEnd', this);
     this.endActorTurn(this.player);
     this.render();
-    await this.wait(250);
+    await this.wait(500);
 
     if (this.extraTurn) {
       this.extraTurn = false;
@@ -1296,10 +1300,10 @@ export class Battle {
       if (mv) {
         this.log(`${e.name} : ${mv.name}`);
         this.fx('enemyAct', { actor: e, move: mvId, intent: e.intent });
-        await this.wait(280);
+        await this.wait(560);
         mv.run(this, e);
         e.history.push(mvId);
-        await this.wait(260);
+        await this.wait(520);
       }
       if (this.over) return;
       this.endActorTurn(e);

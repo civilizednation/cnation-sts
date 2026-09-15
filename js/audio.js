@@ -5,7 +5,6 @@
 let ctx = null;
 let master = null;
 let enabled = true;
-let musicNodes = null;
 
 function ac() {
   if (!ctx) {
@@ -191,30 +190,3 @@ export const SFX = {
     [660, 990, 1320, 1760].forEach((f, i) => tone({ freq: f, type: 'sine', dur: 0.5, vol: 0.2, delay: i * 0.06 }));
   },
 };
-
-/** 아주 단순한 배경 앰비언스 (저음 드론 + 느린 박동) */
-export function startAmbience() {
-  if (musicNodes || !enabled) return;
-  const c = ac(); const t = c.currentTime;
-  const g = c.createGain(); g.gain.value = 0.0; g.connect(master);
-  g.gain.linearRampToValueAtTime(0.05, t + 3);
-  const o1 = c.createOscillator(); o1.type = 'sine'; o1.frequency.value = 55;
-  const o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = 82.5; o2.detune.value = 6;
-  const lfo = c.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.08;
-  const lfoG = c.createGain(); lfoG.gain.value = 0.025;
-  lfo.connect(lfoG); lfoG.connect(g.gain);
-  o1.connect(g); o2.connect(g);
-  o1.start(t); o2.start(t); lfo.start(t);
-  musicNodes = { g, o1, o2, lfo };
-}
-
-export function stopAmbience() {
-  if (!musicNodes) return;
-  const { g, o1, o2, lfo } = musicNodes;
-  const t = ac().currentTime;
-  g.gain.cancelScheduledValues(t);
-  g.gain.setValueAtTime(g.gain.value, t);
-  g.gain.linearRampToValueAtTime(0, t + 1);
-  [o1, o2, lfo].forEach((o) => o.stop(t + 1.1));
-  musicNodes = null;
-}

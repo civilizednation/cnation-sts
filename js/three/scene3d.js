@@ -629,8 +629,27 @@ export function screenPos(actor, heightOffset = 0) {
 
 export function hasModel(actor) { return models.has(actor.uid); }
 
+/** 몬스터 본체의 화면상 위치/반지름 (탭 영역 계산용) */
+export function bodyScreenRect(actor) {
+  const m = models.get(actor && actor.uid);
+  if (!m || !canvasEl || !m.group.visible) return null;
+  const h = (m.shape && m.shape.size) ? m.shape.size : 1;
+  const center = new THREE.Vector3();
+  m.group.getWorldPosition(center);
+  center.y += h * 0.95;
+  const edge = center.clone().add(new THREE.Vector3(h * 1.15, 0, 0));
+  const rect = canvasEl.getBoundingClientRect();
+  const p = center.clone().project(camera);
+  const q = edge.project(camera);
+  const cx = (p.x * 0.5 + 0.5) * rect.width;
+  const cy = (-p.y * 0.5 + 0.5) * rect.height;
+  const qx = (q.x * 0.5 + 0.5) * rect.width;
+  const r = Math.max(30, Math.abs(qx - cx));
+  return { x: cx, y: cy, r, visible: p.z < 1 };
+}
+
 // ---------------- 애니메이션 ----------------
-function tween(o) { tweens.push({ t: 0, dur: 0.3, ...o }); }
+function tween(o) { tweens.push({ t: 0, dur: 0.3, delay: 0, started: false, ...o }); }
 
 export function fxAttack(src, dst) {
   const m = models.get(src.uid);
@@ -638,7 +657,7 @@ export function fxAttack(src, dst) {
   if (!m) return;
   const dir = d ? d.group.position.clone().sub(m.base).normalize() : new THREE.Vector3(1, 0, 0);
   tween({
-    dur: 0.42,
+    dur: 0.84,
     update: (k) => {
       const p = Math.sin(k * Math.PI);
       m.group.position.copy(m.base).addScaledVector(dir, p * 1.25);
@@ -660,12 +679,12 @@ export function fxHit(actor) {
   m.group.traverse((o) => { if (o.isMesh && o.material && o.material.emissive && o !== m.blob) meshes.push(o); });
   const prev = meshes.map((o) => o.material.emissive.clone());
   tween({
-    dur: 0.3,
+    dur: 0.6,
     update: (k) => {
       const f = 1 - k;
       meshes.forEach((o, i) => o.material.emissive.setRGB(f * 0.9, f * 0.05, f * 0.05));
-      m.group.position.x = m.base.x + Math.sin(k * 40) * 0.12 * f;
-      m.group.position.y = m.base.y + Math.sin(k * 30) * 0.06 * f;
+      m.group.position.x = m.base.x + Math.sin(k * 26) * 0.12 * f;
+      m.group.position.y = m.base.y + Math.sin(k * 20) * 0.06 * f;
     },
     done: () => {
       meshes.forEach((o, i) => o.material.emissive.copy(prev[i]));
@@ -735,7 +754,7 @@ export function fxDeath(actor) {
   const meshes = [];
   m.group.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; meshes.push(o); } });
   tween({
-    dur: 0.85,
+    dur: 1.2,
     update: (k) => {
       m.group.position.y = m.base.y - k * 0.5;
       m.group.rotation.z = k * 1.1;
@@ -845,7 +864,9 @@ function renderFrame() {
   for (let i = tweens.length - 1; i >= 0; i--) {
     const tw = tweens[i];
     tw.t += dt;
-    const k = Math.min(1, tw.t / tw.dur);
+    if (tw.t < tw.delay) continue;
+    if (!tw.started) { tw.started = true; tw.start && tw.start(); }
+    const k = Math.min(1, (tw.t - tw.delay) / tw.dur);
     tw.update && tw.update(k);
     if (k >= 1) { tw.done && tw.done(); tweens.splice(i, 1); }
   }
@@ -1021,7 +1042,7 @@ function actorPos(actor, yOff = 1.4) {
 }
 
 /** 들쭉날쭉한 번개 줄기 */
-function spawnBolt(from, to, color, width = 0.07, life = 0.32) {
+function spawnBolt(from, to, color, width = 0.07, life = 0.32, delay = 0) {
   const pts = [];
   const seg = 7;
   for (let i = 0; i <= seg; i++) {
@@ -1036,28 +1057,30 @@ function spawnBolt(from, to, color, width = 0.07, life = 0.32) {
   const curve = new THREE.CatmullRomCurve3(pts);
   const mesh = new THREE.Mesh(
     new THREE.TubeGeometry(curve, 22, width, 5, false),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false }));
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false }));
   root.add(mesh);
-  const light = new THREE.PointLight(color, 3, 9);
+  const light = new THREE.PointLight(color, 0, 9);
   light.position.copy(to);
   root.add(light);
   tween({
-    dur: life,
+    dur: life, delay,
+    start: () => { mesh.material.opacity = 1; },
     update: (k) => { mesh.material.opacity = 1 - k; light.intensity = 3 * (1 - k); },
     done: () => { root.remove(mesh); root.remove(light); mesh.geometry.dispose(); mesh.material.dispose(); },
   });
 }
 
 /** 구체에서 대상으로 날아가는 투사체 */
-function spawnProjectile(from, to, color, size = 0.26, life = 0.3) {
+function spawnProjectile(from, to, color, size = 0.26, life = 0.3, delay = 0) {
   const m = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 6),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0 }));
   m.position.copy(from);
   root.add(m);
-  const light = new THREE.PointLight(color, 2, 6);
+  const light = new THREE.PointLight(color, 0, 6);
   root.add(light);
   tween({
-    dur: life,
+    dur: life, delay,
+    start: () => { m.material.opacity = 0.95; light.intensity = 2; },
     update: (k) => { m.position.copy(from).lerp(to, k); light.position.copy(m.position); m.scale.setScalar(1 + k * 0.6); },
     done: () => { root.remove(m); root.remove(light); burst(to, color); },
   });
@@ -1085,12 +1108,12 @@ function burst(pos, color, n = 10) {
 }
 
 /** 구체 발동 연출. evoke 면 맨 앞 구체를 소모한다. */
-export function fxOrb(type, targets, isEvoke, player) {
+export function fxOrb(type, targets, isEvoke, player, orbIndex = 0, delay = 0) {
   if (!ready) return;
   ensureOrbGroup();
   let fromObj = null;
   if (isEvoke) fromObj = orbObjs.shift();
-  else fromObj = orbObjs[0];
+  else fromObj = orbObjs[orbIndex] || orbObjs[0];
   const from = fromObj
     ? fromObj.group.getWorldPosition(new THREE.Vector3())
     : actorPos(player, 2.6);
@@ -1099,23 +1122,25 @@ export function fxOrb(type, targets, isEvoke, player) {
   const list = (targets || []).filter(Boolean);
 
   if (type === 'lightning') {
-    (list.length ? list : [null]).forEach((t) => {
-      if (t) spawnBolt(from, actorPos(t), st.color, isEvoke ? 0.09 : 0.055, isEvoke ? 0.36 : 0.26);
+    (list.length ? list : [null]).forEach((t, k) => {
+      if (t) spawnBolt(from, actorPos(t), st.color, isEvoke ? 0.09 : 0.06, isEvoke ? 0.7 : 0.5, delay + k * 0.08);
     });
   } else if (type === 'dark') {
-    (list.length ? list : [null]).forEach((t) => {
-      if (t) spawnProjectile(from, actorPos(t), st.color, isEvoke ? 0.34 : 0.2);
+    (list.length ? list : [null]).forEach((t, k) => {
+      if (t) spawnProjectile(from, actorPos(t), st.color, isEvoke ? 0.34 : 0.2, 0.6, delay + k * 0.08);
     });
   } else if (type === 'frost') {
     const to = actorPos(player, 1.3);
-    spawnProjectile(from, to, st.color, isEvoke ? 0.3 : 0.18, 0.26);
+    spawnProjectile(from, to, st.color, isEvoke ? 0.3 : 0.18, 0.5, delay);
   } else if (type === 'plasma') {
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8),
       new THREE.MeshBasicMaterial({ color: st.color, transparent: true, opacity: 0.9 }));
     m.position.copy(from);
     root.add(m);
+    m.material.opacity = 0;
     tween({
-      dur: 0.45,
+      dur: 0.8, delay,
+      start: () => { m.material.opacity = 0.9; },
       update: (k) => { m.position.y = from.y + k * 1.1; m.material.opacity = 0.9 * (1 - k); m.scale.setScalar(1 + k); },
       done: () => root.remove(m),
     });

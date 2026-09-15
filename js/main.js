@@ -16,7 +16,7 @@ import { STANCE_KR } from './engine/battle.js';
 import { MONSTERS } from './data/monsters.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
-import { SFX, unlockAudio, startAmbience, stopAmbience, setSfxEnabled, isSfxEnabled } from './audio.js';
+import { SFX, unlockAudio, setSfxEnabled, isSfxEnabled } from './audio.js';
 import * as S3 from './three/scene3d.js';
 import * as M3 from './three/map3d.js';
 
@@ -76,7 +76,6 @@ function initTitle() {
     const r = loadRun();
     if (!r) { toast('저장된 게임이 없습니다.'); return; }
     G.run = r;
-    startAmbience();
     goMap();
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
@@ -84,7 +83,6 @@ function initTitle() {
 }
 
 function newGame() {
-  startAmbience();
   showCharacterSelect();
 }
 
@@ -403,11 +401,16 @@ function battleFx(type, d) {
       SFX.orbCharge();
       break;
     case 'orbFire': {
-      S3.fxOrb(d.type, d.targets, d.evoke, B.player);
-      if (d.type === 'lightning') SFX.thunder();
-      else if (d.type === 'frost') SFX.ice();
-      else if (d.type === 'dark') SFX.darkBlast();
-      else SFX.plasmaPop();
+      // 구체마다 자기 위치에서, 서로 겹치지 않게 시차를 두고 발사
+      const delay = d.evoke ? 0 : (d.index || 0) * 0.22;
+      S3.fxOrb(d.type, d.targets, d.evoke, B.player, d.index || 0, delay);
+      const playSfx = () => {
+        if (d.type === 'lightning') SFX.thunder();
+        else if (d.type === 'frost') SFX.ice();
+        else if (d.type === 'dark') SFX.darkBlast();
+        else SFX.plasmaPop();
+      };
+      if (delay > 0) setTimeout(playSfx, delay * 1000); else playSfx();
       if (d.evoke && d.type === 'lightning') S3.fxScreenShake(0.8);
       break;
     }
@@ -438,7 +441,7 @@ function renderBattle() {
   renderPotions();
   renderHand();
   renderUnits();
-  if (B.orbSlots) { S3.syncOrbs(B.orbs, B.orbSlots); renderOrbLabels(B); }
+  if (B.usesOrbs) { S3.syncOrbs(B.orbs, B.orbSlots); renderOrbLabels(B); }
   const et = $('#btn-endturn');
   et.disabled = !B.playerTurn || B.over;
   et.classList.toggle('ready', B.playerTurn && !B.hand.some((c) => B.canPlay(c)));
@@ -470,6 +473,12 @@ function renderUnits() {
     const u = el('div', { class: 'unit' + (G.targeting && !isPlayer ? ' targetable' : '') });
     u.dataset.uid = actor.uid;
     const pct = clamp(actor.hp / actor.maxHp, 0, 1) * 100;
+    // 최대 체력에 따라 막대 길이를 차등하되, 차이를 1/4 로 압축해 과하지 않게 한다
+    //  예) 적 최대체력이 내 2배 → 길이 +25% / 내 60% → 길이 -10%
+    const BASE_W = 104;
+    const ratio = isPlayer ? 1 : (actor.maxHp / Math.max(1, B.player.maxHp));
+    const barW = Math.round(BASE_W * clamp(1 + (ratio - 1) / 4, 0.55, 2.1));
+
     let html = '';
     if (!isPlayer && actor.intent && B.playerTurn && !G.run.hasRelic('runicDome')) {
       const it = actor.intent;
@@ -480,7 +489,7 @@ function renderUnits() {
       html += `<div class="intent" style="border-color:${INTENT_COLOR[it.type] || '#888'}">${intentIcon(it.type)}<span>${label}</span></div>`;
     }
     html += `<div class="unit-name">${actor.name}</div>`;
-    html += `<div class="unit-hp"><i style="width:${pct}%"></i><b>${Math.max(0, actor.hp)}/${actor.maxHp}</b></div>`;
+    html += `<div class="unit-hp${isPlayer ? ' me' : ''}" style="width:${barW}px"><i style="width:${pct}%"></i><b>${Math.max(0, actor.hp)}/${actor.maxHp}</b></div>`;
     u.innerHTML = html;
     if (actor.block > 0) {
       u.appendChild(el('div', { class: 'unit-block', text: String(actor.block) }));
@@ -505,7 +514,14 @@ function renderUnits() {
   };
   const units = [mk2(B.player, true), ...B.enemies.filter((e) => e.alive).map((e) => mk2(e, false))];
   units.forEach((u) => ov.appendChild(u));
-  if (B.orbSlots) renderOrbLabels(B);
+  // 몬스터 본체를 직접 탭해서 대상을 고를 수 있게 하는 투명 영역
+  B.enemies.filter((e) => e.alive).forEach((e) => {
+    const hit = el('div', { class: 'unit-hit' + (G.targeting ? ' targetable' : '') });
+    hit.dataset.uid = e.uid;
+    hit.addEventListener('click', () => onTargetTap(e));
+    ov.appendChild(hit);
+  });
+  if (B.usesOrbs) renderOrbLabels(B);
   if (G.targeting) {
     ov.appendChild(el('div', { class: 'hint-banner', text: '공격할 대상을 선택하세요' }));
   }
@@ -544,6 +560,16 @@ function positionOrbLabels() {
 function positionUnits() {
   const B = G.battle;
   if (!B) return;
+  $$('#stage-overlay .unit-hit').forEach((hit) => {
+    const actor = B.enemies.find((a) => a.uid === hit.dataset.uid);
+    const r = actor && S3.bodyScreenRect(actor);
+    if (!r || !r.visible) { hit.style.display = 'none'; return; }
+    hit.style.display = '';
+    hit.style.left = (r.x - r.r) + 'px';
+    hit.style.top = (r.y - r.r) + 'px';
+    hit.style.width = (r.r * 2) + 'px';
+    hit.style.height = (r.r * 2) + 'px';
+  });
   $$('#stage-overlay .unit').forEach((u) => {
     const actor = [B.player, ...B.enemies].find((a) => a.uid === u.dataset.uid);
     if (!actor) return;
@@ -1340,7 +1366,7 @@ function showSettings() {
     sfxBtn.addEventListener('click', () => {
       setSfxEnabled(!isSfxEnabled());
       sfxBtn.textContent = `효과음 : ${isSfxEnabled() ? '켜짐' : '꺼짐'}`;
-      if (isSfxEnabled()) { unlockAudio(); startAmbience(); SFX.tap(); } else stopAmbience();
+      if (isSfxEnabled()) { unlockAudio(); SFX.tap(); }
     });
     box.append(
       sfxBtn,
@@ -1375,7 +1401,6 @@ function showRelicList() {
 function gameOver() {
   const run = G.run;
   SFX.defeat();
-  stopAmbience();
   clearSave();
   stopOverlayLoop();
   openModal((box) => {
