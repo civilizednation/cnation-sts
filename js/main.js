@@ -2,7 +2,8 @@
 //  cnation STS — 메인 컨트롤러
 // ============================================================
 import { $, $$, el, sleep, clamp } from './util.js';
-import { VERSION, VERSION_NOTE } from './version.js';
+import { VERSION } from './version.js';
+import { CHANGELOG } from './data/changelog.js';
 import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, ACT_RANGES } from './engine/run.js';
 import { Battle } from './engine/battle.js';
 import { POWERS, powerName, powerDesc } from './engine/powers.js';
@@ -35,7 +36,7 @@ const G = {
 window.G = G;
 window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 
-const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-modal'];
+const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-modal'];
 function showScreen(id) {
   SCREENS.forEach((s) => { const e = $('#' + s); if (e) e.hidden = s !== id; });
 }
@@ -111,7 +112,9 @@ function modalText(text) { return el('p', { class: 'modal-text', text }); }
 // ============================================================
 function initTitle() {
   const vb = $('#version-badge');
-  if (vb) vb.innerHTML = `Version <b>${VERSION}</b> · ${VERSION_NOTE}`;
+  if (vb) vb.textContent = `Version ${VERSION}`;
+  $('#link-history').addEventListener('click', (e) => { e.preventDefault(); SFX.tap(); showHistory(); });
+  $('#btn-history-home').addEventListener('click', () => { SFX.tap(); showScreen('scr-title'); });
   $('#btn-new').addEventListener('click', () => { unlockAudio(); SFX.tap(); newGame(); });
   $('#btn-continue').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
@@ -122,6 +125,29 @@ function initTitle() {
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
   if (!localStorage.getItem('cnation_sts_save_v1')) $('#btn-continue').disabled = true;
+}
+
+/** 변경 이력 화면 : 1.0.0 부터의 기능 추가/개선 내역 */
+function showHistory() {
+  const body = $('#history-body');
+  body.innerHTML = '';
+  CHANGELOG.forEach((rel, i) => {
+    const sec = el('section', { class: 'rel' + (i === 0 ? ' latest' : '') });
+    sec.append(
+      el('div', { class: 'rel-head' },
+        el('span', { class: 'rel-ver', text: `v${rel.v}` }),
+        el('span', { class: 'rel-note', text: rel.note }),
+        i === 0 ? el('span', { class: 'rel-now', text: '현재' }) : null),
+    );
+    const ul = el('ul', { class: 'rel-list' });
+    rel.items.forEach((t) => ul.appendChild(el('li', { text: t })));
+    sec.appendChild(ul);
+    body.appendChild(sec);
+  });
+  body.appendChild(el('p', { class: 'rel-foot',
+    text: 'Slay the Spire 는 Mega Crit 의 저작물이며, 이 게임은 비영리 팬 프로젝트입니다.' }));
+  body.scrollTop = 0;
+  showScreen('scr-history');
 }
 
 function newGame() {

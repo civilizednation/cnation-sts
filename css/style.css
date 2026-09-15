@@ -60,7 +60,7 @@ html, body {
 .btn.gold { background: linear-gradient(#8a6a20, #5a4210); border-color: var(--gold); color: #fff4d0; }
 
 /* ---------- 타이틀 ---------- */
-#scr-title { align-items: center; justify-content: center; }
+#scr-title { align-items: center; justify-content: center; padding-bottom: calc(var(--safe-b) + 34px); }
 .title-bg {
   position: absolute; inset: 0;
   background:
@@ -83,12 +83,45 @@ html, body {
 .game-title span { font-size: 44px; letter-spacing: 3px; color: #ffd884; }
 .game-title em { font-size: 20px; font-style: italic; color: #e8a24a; margin: -4px 0; }
 .title-sub { color: var(--text-dim); margin: 0 0 34px; font-size: 13px; letter-spacing: .5px; }
-.version-badge {
-  display: inline-block; margin: -22px 0 26px; padding: 3px 12px; border-radius: 999px;
-  background: rgba(24,19,32,.85); border: 1px solid #453a5a;
-  color: #9a92a8; font-size: 11.5px; letter-spacing: .4px; font-family: var(--font);
+/* 타이틀 맨 아래 : 버전 숫자 + 변경 이력 링크 */
+.version-bar {
+  position: absolute; left: 0; right: 0; bottom: calc(10px + var(--safe-b));
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-size: 11.5px; letter-spacing: .4px; font-family: var(--font);
 }
-.version-badge b { color: var(--gold); font-weight: 700; }
+.version-num { color: var(--gold); font-weight: 700; }
+.version-link {
+  color: #8ab4e8; text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.version-link:active { color: #cfe4ff; }
+
+/* ---------- 변경 이력 화면 ---------- */
+#scr-history { background: linear-gradient(#120d18, #08070c 70%); }
+.history-top {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; background: rgba(14,11,20,.96); border-bottom: 1px solid #2a2338;
+}
+.history-top h2 { margin: 0; font-size: 16px; color: var(--gold); font-family: var(--font); font-weight: 700; }
+.history-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 12px 14px calc(20px + var(--safe-b)); display: flex; flex-direction: column; gap: 12px;
+}
+.rel {
+  background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px; padding: 10px 12px;
+}
+.rel.latest { border-color: #6a5a2a; background: rgba(46,38,22,.55); }
+.rel-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; margin-bottom: 6px; }
+.rel-ver { font-size: 14px; font-weight: 700; color: var(--gold); font-family: var(--font); }
+.rel-note { font-size: 11.5px; color: #9a92a8; }
+.rel-now {
+  font-size: 10px; color: #0d0a12; background: var(--gold);
+  border-radius: 999px; padding: 1px 7px; font-weight: 700;
+}
+.rel-list { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.rel-list li { font-size: 12.2px; line-height: 1.55; color: #cfc8d8; }
+.rel-list li::marker { color: #6a5f85; }
+.rel-foot { margin: 4px 0 0; font-size: 10.5px; color: #6a6278; text-align: center; line-height: 1.6; }
 .title-menu { display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .title-foot { margin-top: 30px; font-size: 11px; color: #6a6278; }
 

@@ -9,6 +9,8 @@
    - 예: `1.0.1` → `1.0.2` → `1.0.3` …
    - `VERSION_NOTE` 도 이번 변경을 한 줄로 요약해 갱신한다 (타이틀 화면 배지에 표시됨).
    - `README.md` 하단 **변경 이력**에 해당 버전 항목을 추가한다.
+   - `js/data/changelog.js` 의 `CHANGELOG` 맨 위에도 같은 내용을 추가한다.
+     (타이틀 화면 → `Revision History` 링크로 보이는 목록)
 2. **작업 브랜치에서 개발 → `main` 에 머지 → 푸시까지 한 번에 끝낸다.**
    - 개발 브랜치 : `claude/slay-the-spire-mobile-mo3fo3`
    - 커밋 후 `git checkout main && git merge --ff-only <브랜치> && git push origin main`
@@ -61,6 +63,7 @@ js/data/
   monsters.js              몬스터 57 + 조우 테이블 + 초반 약체 풀
   relics.js                유물 117 (캐릭터 전용 포함)
   potions.js / events.js / neow.js (시작 보너스)
+  changelog.js             변경 이력 (타이틀 → Revision History)
 js/engine/
   powers.js                힘·상태이상 정의
   battle.js                전투 엔진 (턴/피해/AI/구체/자세/통찰)

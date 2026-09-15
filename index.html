@@ -27,13 +27,16 @@
     <div class="title-wrap">
       <h1 class="game-title"><span>SLAY</span><em>the</em><span>SPIRE</span></h1>
       <p class="title-sub">cnation 모바일 에디션 · 전 50층</p>
-      <div class="version-badge" id="version-badge"></div>
       <div class="title-menu">
         <button class="btn big" id="btn-new">새 게임</button>
         <button class="btn big ghost" id="btn-continue">이어하기</button>
         <button class="btn ghost" id="btn-help">게임 방법</button>
       </div>
       <div class="title-foot">원작 규칙 재현 · 아이언클래드 75종 카드 · 몬스터 57종</div>
+    </div>
+    <div class="version-bar">
+      <span class="version-num" id="version-badge"></span>
+      <a class="version-link" id="link-history" href="#">Revision History</a>
     </div>
   </section>
 
@@ -86,6 +89,15 @@
       <div class="potion-row" id="potion-row"></div>
       <button class="btn end-turn" id="btn-endturn">턴 종료</button>
     </div>
+  </section>
+
+  <!-- ============ 변경 이력 ============ -->
+  <section class="screen" id="scr-history" hidden>
+    <header class="history-top">
+      <h2>Revision History</h2>
+      <button class="btn sm" id="btn-history-home">홈으로</button>
+    </header>
+    <div class="history-body" id="history-body"></div>
   </section>
 
   <!-- ============ 범용 모달/오버레이 화면 ============ -->
