@@ -27,7 +27,7 @@ export const CHARACTERS = {
     tagline: '구체를 부리는 자동인형',
     desc: '번개·냉기·암흑·플라즈마 구체를 충전하고 발동시켜 싸웁니다.',
     accent: '#4aa8e8',
-    model: { armor: '#2f5a8b', trim: '#90d0ff', skin: '#a0c8e0', weapon: 'orb', orbs: true, eye: '#7cd0ff' },
+    model: { armor: '#2f5a8b', trim: '#90d0ff', skin: '#a0c8e0', weapon: 'orb', eye: '#7cd0ff' },
   },
   watcher: {
     id: 'watcher', name: '와쳐', en: 'Watcher', color: 'purple',

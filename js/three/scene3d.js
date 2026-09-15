@@ -503,12 +503,6 @@ function buildPlayer(spec) {
   if (sp.blindfold) {
     meshOf(new THREE.BoxGeometry(0.74, 0.16, 0.74), mat(sp.cape || '#6a3fa0', { rough: 0.9 }), [0, 2.07, 0], g, false);
   }
-  if (sp.orbs) {
-    const ringM = mat(sp.trim, { metal: 0.85, rough: 0.2, emissive: sp.trim, ei: 0.5 });
-    const halo = meshOf(new THREE.TorusGeometry(0.52, 0.05, 6, 20), ringM, [0, 2.45, 0], g, false);
-    halo.rotation.x = Math.PI / 2;
-    parts.halo = halo;
-  }
   parts.eyes = addEyes(g, sp.blindfold ? 0 : 2, 2.05, 0.33, 0.06, new THREE.Color(sp.eye).getHex(), 0.14);
 
   // 팔 / 다리
@@ -539,11 +533,8 @@ function buildPlayer(spec) {
     meshOf(new THREE.CylinderGeometry(0.05, 0.05, 2.1, 6), mat('#5a3a22'), [0, 0.6, 0], w);
     meshOf(new THREE.TorusGeometry(0.17, 0.045, 6, 16), mat(sp.trim, { metal: 0.8, emissive: sp.trim, ei: 0.8 }), [0, 1.72, 0], w, false);
   } else if (sp.weapon === 'orb') {
-    const core = meshOf(new THREE.IcosahedronGeometry(0.22, 1), mat(sp.trim, { emissive: sp.trim, ei: 1.4, metal: 0.5 }), [0, 0.6, 0], w, false);
-    parts.orbCore = core;
-    const r = meshOf(new THREE.TorusGeometry(0.34, 0.035, 6, 18), mat(sp.trim, { emissive: sp.trim, ei: 0.7 }), [0, 0.6, 0], w, false);
-    r.rotation.x = Math.PI / 2.5;
-    parts.orbRing = r;
+    // 디펙트는 무기를 들지 않는다. 충전한 구체가 주위를 돌기 때문에
+    // 장식용으로 떠 있던 오브/후광은 구체와 겹쳐서 제거했다.
   } else {
     meshOf(new THREE.CylinderGeometry(0.06, 0.06, 0.35, 6), mat('#4a2a18'), [0, 0, 0], w);
     meshOf(new THREE.BoxGeometry(0.34, 0.08, 0.08), trim, [0, 0.2, 0], w, false);
@@ -625,7 +616,8 @@ export function screenPos(actor, heightOffset = 0) {
   const v = new THREE.Vector3();
   m.group.getWorldPosition(v);
   const h = (m.shape && m.shape.size ? m.shape.size : 1);
-  v.y += heightOffset || (actor.isPlayer ? 2.9 : 1.6 + h * 1.5);
+  // 구체가 떠 있으면 이름/체력바를 조금 더 위로 올려 겹치지 않게 한다
+  v.y += heightOffset || (actor.isPlayer ? (orbObjs.length ? 3.5 : 2.9) : 1.6 + h * 1.5);
   v.project(camera);
   const rect = canvasEl.getBoundingClientRect();
   return {
@@ -820,9 +812,6 @@ function renderFrame() {
         : (m.parts.head.userData.py = m.parts.head.position.y)) + Math.sin(t * 2.2 + off) * 0.035;
     }
     if (m.parts && m.parts.ring) m.parts.ring.rotation.z += dt * 0.7;
-    if (m.parts && m.parts.halo) m.parts.halo.rotation.z += dt * 0.6;
-    if (m.parts && m.parts.orbRing) m.parts.orbRing.rotation.z += dt * 1.4;
-    if (m.parts && m.parts.orbCore) m.parts.orbCore.rotation.y += dt * 1.2;
     if (m.parts && m.parts.ring2) m.parts.ring2.rotation.y += dt * 0.9;
     if (m.parts && m.parts.wings) m.parts.wings.forEach((w, i) => { w.rotation.z = (i ? 1 : -1) * (0.3 + Math.sin(t * 6) * 0.35); });
     if (m.parts && m.parts.cape) m.parts.cape.rotation.x = 0.14 + Math.sin(t * 1.1) * 0.04;
