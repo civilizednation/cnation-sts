@@ -335,21 +335,27 @@ const LEGEND = [
   ['monster', '전투'], ['elite', '엘리트'], ['event', '의문'],
   ['rest', '모닥불'], ['shop', '상점'], ['treasure', '보물'], ['boss', '보스'],
 ];
+// 실제 몬스터 덩치를 반영해 범례 아이콘 크기를 차등한다 (일반 1 · 엘리트 1.2 · 보스 1.4)
+const LEGEND_BASE = 29;
+const LEGEND_SCALE = { elite: 1.2, boss: 1.4 };
 
 let legendThumbs = null;   // 지도 3D 아이콘을 구운 썸네일 캐시
 
 function renderLegend() {
   const box = $('#map-legend');
   if (!box) return;
-  if (!legendThumbs) legendThumbs = M3.iconThumbs(LEGEND.map(([t]) => t), 80) || {};
+  if (!legendThumbs) legendThumbs = M3.iconThumbs(LEGEND.map(([t]) => t), 112) || {};
   box.innerHTML = '';
   LEGEND.forEach(([type, label]) => {
     const color = ROOM_COLOR[type];
+    const px = Math.round(LEGEND_BASE * (LEGEND_SCALE[type] || 1));
     // 범례도 지도에서 쓰는 실제 3D 아이콘을 축소해 보여준다 (썸네일 실패 시 색 점)
     const mark = legendThumbs[type]
-      ? el('img', { class: 'legend-icon', src: legendThumbs[type], alt: label })
+      ? el('img', { class: 'legend-icon', src: legendThumbs[type], alt: label,
+          style: { width: px + 'px', height: px + 'px' } })
       : el('i', { class: 'legend-dot', style: { color } });
-    box.appendChild(el('div', { class: 'legend-item' }, mark, el('span', { text: label })));
+    box.appendChild(el('div', { class: 'legend-item' + (LEGEND_SCALE[type] ? ' big' : '') },
+      mark, el('span', { text: label })));
   });
 }
 

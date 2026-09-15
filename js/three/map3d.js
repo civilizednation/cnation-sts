@@ -287,23 +287,89 @@ function buildIcon(type) {
       g.userData.glow = glow;
       break;
     }
-    case 'boss': {             // 왕관을 쓴 어둠의 결정
-      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.72, 0), M(0x5a1030, { emissive: 0xc02040, ei: 0.9, metal: 0.5, rough: 0.3 }));
-      crystal.scale.set(1, 1.35, 1);
-      g.add(crystal);
-      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.5, 0.24, 6), M(0xe8c34a, { metal: 0.9, rough: 0.2, emissive: 0x6a4a10, ei: 0.6 }));
-      crown.position.y = 0.82;
-      g.add(crown);
-      for (let i = 0; i < 6; i++) {
-        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.26, 4), M(0xe8c34a, { metal: 0.9, rough: 0.2 }));
-        const a = (i / 6) * Math.PI * 2;
-        sp.position.set(Math.cos(a) * 0.45, 1.0, Math.sin(a) * 0.45);
+    case 'boss': {             // 마왕의 두개골 : 거대한 뿔 + 이글거리는 눈 + 송곳니
+      const boneM = M(0xbfbcae, { rough: 0.78, metal: 0.04 });
+      const darkM = M(0x1e0c18, { rough: 0.9, metal: 0.1 });
+      const eyeM = M(0xff2a2a, { emissive: 0xff1010, ei: 3.2, rough: 0.2 });
+
+      // 두개골 (약간 각진 저폴리)
+      const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), boneM);
+      skull.scale.set(1.12, 1.08, 0.9);
+      skull.position.y = 0.16;
+      g.add(skull);
+      // 이마의 검은 균열 판
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.13, 0.12), darkM);
+      brow.position.set(0, 0.3, 0.36);
+      brow.rotation.z = 0.04;
+      g.add(brow);
+
+      // 움푹한 눈구멍 + 이글거리는 눈
+      [-1, 1].forEach((sd) => {
+        const socket = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.1), darkM);
+        socket.position.set(sd * 0.21, 0.15, 0.4);
+        socket.rotation.z = sd * 0.28;
+        g.add(socket);
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 6), eyeM);
+        eye.position.set(sd * 0.21, 0.15, 0.45);
+        g.add(eye);
+      });
+
+      // 턱 + 송곳니 (위아래로 마주보는 어금니)
+      const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.2, 0.42), boneM);
+      jaw.position.set(0, -0.22, 0.14);
+      g.add(jaw);
+      for (let i = 0; i < 5; i++) {
+        const x = -0.2 + i * 0.1;
+        const up = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.2, 4), boneM);
+        up.position.set(x, -0.13, 0.33);
+        up.rotation.x = Math.PI;
+        g.add(up);
+        if (i % 2 === 0) {
+          const dn = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 4), boneM);
+          dn.position.set(x, -0.26, 0.33);
+          g.add(dn);
+        }
+      }
+
+      // 거대한 뿔 — 바깥쪽 위로 휘어 올라간다 (마디 3개)
+      [-1, 1].forEach((sd) => {
+        const horn = new THREE.Group();
+        const seg = [
+          { r0: 0.19, r1: 0.15, h: 0.40, x: 0.02, y: 0.02, rz: 0.62 },
+          { r0: 0.15, r1: 0.10, h: 0.38, x: 0.28, y: 0.30, rz: 0.18 },
+          { r0: 0.10, r1: 0.012, h: 0.40, x: 0.40, y: 0.64, rz: -0.42 },
+        ];
+        seg.forEach((sg) => {
+          const m = new THREE.Mesh(new THREE.CylinderGeometry(sg.r1, sg.r0, sg.h, 6), boneM);
+          m.position.set(sd * (0.4 + sg.x), 0.4 + sg.y, -0.02);
+          m.rotation.z = sd * sg.rz;
+          horn.add(m);
+        });
+        g.add(horn);
+      });
+
+      // 정수리의 부러진 뿔 가시들
+      for (let i = 0; i < 5; i++) {
+        const a = -0.9 + i * 0.45;
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.2 + (i % 2) * 0.1, 4), darkM);
+        sp.position.set(Math.sin(a) * 0.3, 0.62 + Math.cos(a) * 0.1, -0.1);
+        sp.rotation.z = -a * 0.5;
         g.add(sp);
       }
-      const lt = new THREE.PointLight(0xff3060, 2, 6);
-      lt.position.set(0, 0.4, 0.6);
+
+      // 붉은 기운 (뒤쪽 후광)
+      const aura = new THREE.Mesh(new THREE.CircleGeometry(0.78, 20),
+        new THREE.MeshBasicMaterial({ color: 0xff2040, transparent: true, opacity: 0.22,
+          blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      aura.position.set(0, 0.16, -0.45);
+      aura.userData.noFit = true;
+      g.add(aura);
+
+      const lt = new THREE.PointLight(0xff2040, 1.2, 5);
+      lt.position.set(0.3, 0.1, 0.8);
       g.add(lt);
-      g.userData.spin = crystal;
+      // 보스는 정면을 응시하도록 회전시키지 않는다
+      g.userData.aura = aura;
       break;
     }
   }
@@ -337,7 +403,10 @@ export function iconThumbs(types, px = 44) {
     types.forEach((type) => {
       const g = buildIcon(type);
       sc.add(g);
-      const sph = new THREE.Box3().setFromObject(g).getBoundingSphere(new THREE.Sphere());
+      // 후광 같은 장식면은 프레이밍 계산에서 빼서 본체가 작아지지 않게 한다
+      const box = new THREE.Box3();
+      g.traverse((o) => { if (o.isMesh && !o.userData.noFit) box.expandByObject(o); });
+      const sph = box.getBoundingSphere(new THREE.Sphere());
       const d = (sph.radius / Math.tan((38 * Math.PI / 180) / 2)) * 1.1;
       cam.position.set(sph.center.x + d * 0.10, sph.center.y + d * 0.14, sph.center.z + d);
       cam.lookAt(sph.center);
@@ -632,6 +701,11 @@ function loop() {
       });
     } else if (ic && ic.flame) ic.flame.scale.setScalar(1 + Math.sin(t * 6 + off) * 0.12);
     if (ic && ic.glow) ic.glow.material.opacity = 0.4 + Math.sin(t * 2.6 + off) * 0.18;
+    if (ic && ic.aura) {
+      const k = 1 + Math.sin(t * 2.2 + off) * 0.1;
+      ic.aura.scale.set(k, k, 1);
+      ic.aura.material.opacity = 0.18 + Math.sin(t * 2.2 + off) * 0.08;
+    }
   });
   scene.children.forEach((o) => {
     if (o.userData.pulse) o.material.opacity = 0.75 + Math.sin(t * 5) * 0.25;
