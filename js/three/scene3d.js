@@ -360,7 +360,7 @@ function addEyes(group, n, y, z, r = 0.1, color = 0xfff0a0, spread = 0.28) {
 }
 
 // ---------------- 절차적 모델 생성 ----------------
-function buildEnemy(shape) {
+export function buildEnemy(shape) {
   const g = new THREE.Group();
   const parts = { eyes: [], body: null, limbs: [] };
   const c1 = shape.color || '#8b4a2b';
@@ -663,7 +663,7 @@ function buildEnemy(shape) {
 }
 
 /** 캐릭터별 플레이어 모델 (절차적) */
-function buildPlayer(spec) {
+export function buildPlayer(spec) {
   const sp = Object.assign({
     armor: '#8b2f2f', trim: '#c8b8a0', skin: '#d8b090', cape: '#9a2626',
     weapon: 'sword', horns: true, eye: '#ff5030',

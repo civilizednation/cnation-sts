@@ -18,6 +18,7 @@ import { MONSTERS } from './data/monsters.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
 import * as I3 from './three/items3d.js';
+import * as T3 from './three/title3d.js';
 import { SFX, unlockAudio, setSfxEnabled, isSfxEnabled } from './audio.js';
 import * as S3 from './three/scene3d.js';
 import * as M3 from './three/map3d.js';
@@ -41,6 +42,7 @@ window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // �
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-modal'];
 function showScreen(id) {
   SCREENS.forEach((s) => { const e = $('#' + s); if (e) e.hidden = s !== id; });
+  if (id === 'scr-title') requestAnimationFrame(() => { try { T3.resizeTitle(); } catch (e) { /* noop */ } });
 }
 function showOverlayScreen(id, on) { const e = $('#' + id); if (e) e.hidden = !on; }
 
@@ -113,6 +115,7 @@ function modalText(text) { return el('p', { class: 'modal-text', text }); }
 //  타이틀
 // ============================================================
 function initTitle() {
+  startTitleScene();
   const vb = $('#version-badge');
   if (vb) vb.textContent = `Version ${VERSION}`;
   $('#link-history').addEventListener('click', (e) => { e.preventDefault(); SFX.tap(); showHistory(); });
@@ -127,6 +130,13 @@ function initTitle() {
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
   if (!localStorage.getItem('cnation_sts_save_v1')) $('#btn-continue').disabled = true;
+}
+
+/** 타이틀 3D 무대 (캐릭터 4종) — 타이틀이 보일 때만 돌린다 */
+function startTitleScene() {
+  const cv = $('#title-canvas');
+  if (!cv) return;
+  try { T3.initTitle(cv, 'throne'); T3.resizeTitle(); } catch (e) { /* WebGL 불가 시 무시 */ }
 }
 
 /** 변경 이력 화면 : 1.0.0 부터의 기능 추가/개선 내역 */
@@ -1628,6 +1638,7 @@ function bind() {
     S3.resize();
     if (G.battle) renderBattle();
     if (G.run && !$('#scr-map').hidden) { M3.resizeMap(); }
+    if (!$('#scr-title').hidden) T3.resizeTitle();
   });
   addEventListener('visibilitychange', () => { if (document.hidden && G.run) saveRun(G.run); });
 }
