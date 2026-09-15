@@ -105,13 +105,13 @@ E({ id: 'deadAdventurer', name: '죽은 모험가', acts: [1, 2],
   text: '쓰러진 모험가의 시신이 있다. 무언가 남아있을지도 모른다.',
   art: 'corpse',
   options: [
-    { label: '수색한다', desc: '보상을 얻지만 정예 몬스터를 만날 수 있다.',
+    { label: '수색한다', desc: '보상을 얻지만 엘리트 몬스터를 만날 수 있다.',
       effect: async (run, ctx) => {
         const roll = run.rng.next();
         if (roll < 0.25) { const r = run.relicReward(); if (r) run.addRelic(r); return '유물을 발견했다!'; }
         if (roll < 0.6) { const g = run.rng.range(30, 80); run.gainGold(g); return `골드 ${g}를 발견했다.`; }
         await ctx.battle('elite');
-        return '정예 몬스터가 나타났다!';
+        return '엘리트 몬스터가 나타났다!';
       } },
     { label: '떠난다', desc: '', effect: () => '경의를 표하고 떠났다.' },
   ] });
@@ -195,7 +195,7 @@ E({ id: 'mysteriousSphere', name: '신비한 구체', acts: [3],
   text: '떠다니는 구체가 당신을 유혹한다.',
   art: 'sphere',
   options: [
-    { label: '연다', desc: '정예 2체와 싸우고 희귀 유물을 얻는다.',
+    { label: '연다', desc: '엘리트 2체와 싸우고 희귀 유물을 얻는다.',
       effect: async (run, ctx) => { await ctx.battle('elite', 'rare'); return '구체에서 수호자들이 튀어나왔다!'; } },
     { label: '떠난다', desc: '', effect: () => '구체를 남겨두고 떠났다.' },
   ] });

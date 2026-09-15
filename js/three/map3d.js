@@ -98,14 +98,30 @@ function buildIcon(type) {
       });
       break;
     }
-    case 'event': {            // 떠 있는 물음표 수정
-      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), M(c, { emissive: 0x3a6ab0, ei: 0.8, rough: 0.2, metal: 0.6 }));
-      g.add(core);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.05, 6, 22), M(0x9ad0ff, { emissive: 0x4a90ff, ei: 0.7 }));
-      ring.rotation.x = Math.PI / 2.2;
-      g.add(ring);
-      g.userData.spin = core;
-      g.userData.ring = ring;
+    case 'event': {            // 물음표 : 열린 고리(윗획) + 꼬리 + 점
+      const mat = M(c, { emissive: 0x4a90ff, ei: 1.2, rough: 0.25, metal: 0.35 });
+      const q = new THREE.Group();
+      const R = 0.24, TUBE = 0.082;
+      // 윗획 — 250° 만 남긴 고리를 돌려서 오른쪽 아래가 열리게 한다
+      const hook = new THREE.Mesh(new THREE.TorusGeometry(R, TUBE, 6, 20, Math.PI * 1.39), mat);
+      hook.rotation.z = -Math.PI * 0.39;
+      q.add(hook);
+      // 꼬리 — 고리 끝에서 가운데 아래로 내려온다
+      const a0 = -Math.PI * 0.39;
+      const from = new THREE.Vector3(Math.cos(a0) * R, Math.sin(a0) * R, 0);
+      const to = new THREE.Vector3(0, -0.36, 0);
+      const dir = new THREE.Vector3().subVectors(to, from);
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(TUBE, TUBE * 0.92, dir.length(), 6), mat);
+      tail.position.copy(from).add(to).multiplyScalar(0.5);
+      tail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+      q.add(tail);
+      // 아래 점
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.105, 8, 6), mat);
+      dot.position.set(0, -0.58, 0);
+      q.add(dot);
+      q.position.y = 0.12;
+      g.add(q);
+      // 물음표는 정면을 유지 (회전시키면 옆면이 되어 안 읽힌다)
       break;
     }
     case 'rest': {             // 모닥불
@@ -128,17 +144,48 @@ function buildIcon(type) {
       g.userData.flame = flame;
       break;
     }
-    case 'shop': {             // 상인 천막 + 물약
-      const tent = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.7, 4), M(0x3a8b6a));
-      tent.position.y = 0.1;
-      tent.rotation.y = Math.PI / 4;
-      g.add(tent);
-      const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 0.6), M(0x6b4a2a, { metal: 0 }));
-      base.position.y = -0.32;
-      g.add(base);
-      const bottle = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), M(0x8affc0, { emissive: 0x30c070, ei: 1.1 }));
-      bottle.position.set(0.34, -0.12, 0.26);
+    case 'shop': {             // 노점 : 줄무늬 차양 + 판매대 + 진열품
+      const woodM = M(0x7a5330, { metal: 0, rough: 0.9 });
+      // 판매대(카운터)
+      const counter = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.34, 0.5), woodM);
+      counter.position.y = -0.36;
+      g.add(counter);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.09, 0.6), M(0x9a6b3e, { metal: 0, rough: 0.85 }));
+      top.position.y = -0.15;
+      g.add(top);
+      // 차양 기둥
+      [-1, 1].forEach((sd) => {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.62, 5), woodM);
+        pole.position.set(sd * 0.5, 0.16, -0.16);
+        g.add(pole);
+      });
+      // 줄무늬 차양 (빨강/흰색 판을 번갈아 기울여 붙인다)
+      for (let i = 0; i < 5; i++) {
+        const col = i % 2 ? 0xf2f0e6 : 0xc8453a;
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.05, 0.62),
+          M(col, { metal: 0.05, rough: 0.7, emissive: i % 2 ? 0x000000 : 0x3a0e0c, ei: 0.5 }));
+        slat.position.set(-0.5 + i * 0.25, 0.5, 0.06);
+        slat.rotation.x = -0.34;
+        g.add(slat);
+      }
+      // 차양 앞단 테두리
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.06, 0.07), M(0xe8c34a, { metal: 0.7, rough: 0.3, emissive: 0x5a4210, ei: 0.6 }));
+      trim.position.set(0, 0.39, 0.29);
+      g.add(trim);
+      // 진열품 : 물약 병 + 금화 더미
+      const bottle = new THREE.Mesh(new THREE.SphereGeometry(0.115, 8, 6), M(0x8affc0, { emissive: 0x30c070, ei: 1.3 }));
+      bottle.position.set(-0.3, -0.02, 0.2);
       g.add(bottle);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.1, 5), M(0x8affc0, { emissive: 0x30c070, ei: 0.9 }));
+      neck.position.set(-0.3, 0.08, 0.2);
+      g.add(neck);
+      for (let i = 0; i < 3; i++) {
+        const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 10),
+          M(0xe8c34a, { metal: 0.9, rough: 0.2, emissive: 0x6a4a10, ei: 0.8 }));
+        coin.position.set(0.3, -0.07 + i * 0.04, 0.18);
+        coin.rotation.z = 0.06 * (i % 2 ? 1 : -1);
+        g.add(coin);
+      }
       break;
     }
     case 'treasure': {         // 보물 상자

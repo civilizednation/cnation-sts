@@ -24,7 +24,7 @@ export const ROOM = {
 };
 
 export const ROOM_KR = {
-  monster: '전투', elite: '정예', event: '의문', rest: '모닥불',
+  monster: '전투', elite: '엘리트', event: '의문', rest: '모닥불',
   shop: '상점', treasure: '보물', boss: '보스',
 };
 

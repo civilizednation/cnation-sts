@@ -240,7 +240,7 @@ function showHelp() {
 턴을 마치면 적이 예고한 <b>의도</b>대로 공격합니다.<br><br>
 <b>방어도</b>는 턴이 끝나면 사라집니다. 피해를 먼저 흡수합니다.<br>
 <b>취약</b> 받는 피해 +50% / <b>약화</b> 주는 피해 -25% / <b>허약</b> 방어도 -25%<br><br>
-<b>지도</b> — ⚔ 전투, ☠ 정예, ? 의문, 🔥 모닥불, 상점, 보물<br>
+<b>지도</b> — ⚔ 전투, ☠ 엘리트, ? 의문, 🔥 모닥불, 상점, 보물<br>
 17층·34층·50층에 보스가 있으며, 막을 넘어가면 체력이 전부 회복됩니다.<br><br>
 진행 상황은 자동 저장됩니다.` }),
       el('div', { class: 'modal-actions' },
@@ -332,7 +332,7 @@ const ROOM_GLYPH = { monster: 'sword', elite: 'skull', event: 'question', rest: 
 const ROOM_COLOR = { monster: '#d0a0a0', elite: '#ff6a5a', event: '#a0d0ff', rest: '#ffa04a', shop: '#8affc0', treasure: '#ffd24a', boss: '#ff5a4a' };
 
 const LEGEND = [
-  ['monster', '전투'], ['elite', '정예'], ['event', '의문'],
+  ['monster', '전투'], ['elite', '엘리트'], ['event', '의문'],
   ['rest', '모닥불'], ['shop', '상점'], ['treasure', '보물'], ['boss', '보스'],
 ];
 
@@ -341,7 +341,7 @@ let legendThumbs = null;   // 지도 3D 아이콘을 구운 썸네일 캐시
 function renderLegend() {
   const box = $('#map-legend');
   if (!box) return;
-  if (!legendThumbs) legendThumbs = M3.iconThumbs(LEGEND.map(([t]) => t), 48) || {};
+  if (!legendThumbs) legendThumbs = M3.iconThumbs(LEGEND.map(([t]) => t), 64) || {};
   box.innerHTML = '';
   LEGEND.forEach(([type, label]) => {
     const color = ROOM_COLOR[type];
@@ -1514,7 +1514,7 @@ function gameOver() {
     box.append(
       modalTitle('당신은 쓰러졌다'),
       el('div', { class: 'relic-big', style: { width: '72px', height: '72px', borderColor: '#8a2a2a' }, html: svgIcon('skull', { size: 40, color: '#d04a4a' }) }),
-      modalText(`도달 층수 : ${run.floor}층 (${run.act}막)\n처치한 적 : ${run.stats.kills}\n정예 처치 : ${run.stats.elites}\n보스 처치 : ${run.stats.bosses}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
+      modalText(`도달 층수 : ${run.floor}층 (${run.act}막)\n처치한 적 : ${run.stats.kills}\n엘리트 처치 : ${run.stats.elites}\n보스 처치 : ${run.stats.bosses}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '다시 도전', onclick: () => { closeModal(); newGame(); } }),
         el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); showScreen('scr-title'); $('#btn-continue').disabled = true; } })),

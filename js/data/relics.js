@@ -103,7 +103,7 @@ R({ id: 'potionBelt', name: '물약 벨트', en: 'Potion Belt', rarity: 'common'
   onEquip: (run) => { run.potionSlots += 2; } });
 
 R({ id: 'preservedInsect', name: '보존된 곤충', en: 'Preserved Insect', rarity: 'common', glyph: 'insect',
-  desc: '정예 몬스터의 체력이 25% 감소한 상태로 시작합니다.' });
+  desc: '엘리트 몬스터의 체력이 25% 감소한 상태로 시작합니다.' });
 
 R({ id: 'regalPillow', name: '고급 베개', en: 'Regal Pillow', rarity: 'common', glyph: 'pillow',
   desc: '모닥불에서 휴식할 때 체력을 15 더 회복합니다.' });
@@ -357,7 +357,7 @@ R({ id: 'emptyCage', name: '빈 새장', en: 'Empty Cage', rarity: 'boss', glyph
 R({ id: 'sacredBark', name: '신성한 나무껍질', en: 'Sacred Bark', rarity: 'boss', glyph: 'bark',
   desc: '물약의 효과가 2배가 됩니다.' });
 R({ id: 'slaversCollar', name: '노예상의 목줄', en: "Slaver's Collar", rarity: 'boss', glyph: 'collar',
-  desc: '정예/보스 전투에서 에너지를 1 더 얻습니다.' });
+  desc: '엘리트/보스 전투에서 에너지를 1 더 얻습니다.' });
 R({ id: 'astrolabe', name: '아스트롤라베', en: 'Astrolabe', rarity: 'boss', glyph: 'astro',
   desc: '획득 시 무작위 카드 3장을 변환하고 강화합니다.' });
 R({ id: 'tinyHouse', name: '작은 집', en: 'Tiny House', rarity: 'boss', glyph: 'house',
