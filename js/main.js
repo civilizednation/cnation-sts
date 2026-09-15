@@ -681,6 +681,9 @@ function renderHand() {
     c.style.left = x + 'px';
     c.style.transform = `translateY(${y}px) rotate(${ang}deg)`;
     c.style.zIndex = 10 + i;
+    // 선택 취소 시 되돌아갈 원래 자리
+    c.dataset.homeLeft = x + 'px';
+    c.dataset.homeTransform = c.style.transform;
     if (!B.canPlay(card)) c.classList.add('unplayable-now');
     if (G.selectedCard && G.selectedCard.uid === card.uid) {
       c.classList.add('selected');
@@ -690,6 +693,33 @@ function renderHand() {
     attachCardEvents(c, card);
     handEl.appendChild(c);
   });
+  const cz = $('#cancel-zone');
+  if (cz) cz.classList.toggle('armed', !!G.selectedCard);
+}
+
+/** 선택한 카드(및 물약 대상 지정)를 취소하고 원래 자리로 되돌린다 */
+function clearSelection() {
+  if (!G.selectedCard && G.pendingPotion === null && !G.targeting) return false;
+  const sel = $('#hand .card.selected');
+  G.selectedCard = null;
+  G.targeting = false;
+  G.pendingPotion = null;
+  SFX.tap();
+
+  const cz = $('#cancel-zone');
+  if (cz) cz.classList.remove('armed');
+  $$('#stage-overlay .unit, #stage-overlay .unit-hit').forEach((u) => u.classList.remove('targetable'));
+
+  if (sel && sel.dataset.homeLeft) {
+    // 떠올라 있던 카드를 손패 제자리로 미끄러지듯 되돌린 뒤 다시 그린다
+    sel.classList.remove('selected');
+    sel.style.left = sel.dataset.homeLeft;
+    sel.style.transform = sel.dataset.homeTransform;
+    setTimeout(() => { if (G.battle && !G.selectedCard) renderBattle(); }, 200);
+  } else {
+    renderBattle();
+  }
+  return true;
 }
 
 function attachCardEvents(elm, card) {
@@ -1527,6 +1557,12 @@ function bind() {
     if (e.target.id === 'stage-overlay' && G.selectedCard) {
       G.selectedCard = null; G.targeting = false; renderBattle();
     }
+  });
+  // 화면 맨 아래 빈 띠 + 액션바의 빈 공간을 탭하면 선택 취소
+  $('#cancel-zone').addEventListener('click', () => { clearSelection(); });
+  $('.actionbar').addEventListener('click', (e) => {
+    if (e.target.closest('button, .potion-slot, .energy-orb')) return;
+    clearSelection();
   });
   addEventListener('resize', () => {
     S3.resize();
