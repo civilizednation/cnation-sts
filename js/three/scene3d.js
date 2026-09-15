@@ -40,6 +40,221 @@ function addBlobShadow(group, radius = 1) {
   return m;
 }
 
+// ============================================================
+//  배경(막별 색조 + 층별 변주)
+// ============================================================
+const lights = {};
+let envObjs = [];
+let envKey = '';
+
+/** 막마다 다른 색 계통. 1막=어두운 회색 석조, 2막=어두운 갈색, 3막=어두운 보라. */
+const ACT_THEME = [
+  { // 1막 — 첨탑 하부 감옥 : 어두운 회색 석조
+    name: '석조',
+    fog: 0x1b1b22, ground: 0x4c4c56, pillar: 0x3a3a46, arch: 0x30303c,
+    accent: 0xffb070, accent2: 0x9fb4d8,
+    sky: 0xa8b4cc, gnd: 0x3a3a46, key: 0xffe8d4, rim: 0x7a88ac, amb: 0xc4c8d8,
+    fireCol: 0xff9a5a, fogNear: 17, fogFar: 40,
+  },
+  { // 2막 — 도시 : 어두운 갈색 목조/벽돌
+    name: '목조',
+    fog: 0x241a12, ground: 0x5c4834, pillar: 0x4a3626, arch: 0x3e2d1f,
+    accent: 0xffb45a, accent2: 0x8fc07a,
+    sky: 0xd8b890, gnd: 0x402c1c, key: 0xffd8a0, rim: 0xa87a4a, amb: 0xd8c0a0,
+    fireCol: 0xffa050, fogNear: 16, fogFar: 38,
+  },
+  { // 3막 — 첨탑 상부 : 어두운 보라
+    name: '심층',
+    fog: 0x180f2c, ground: 0x4a3a6e, pillar: 0x3a2c5a, arch: 0x32254c,
+    accent: 0xc070ff, accent2: 0x70e0ff,
+    sky: 0xb0a0f0, gnd: 0x3a2850, key: 0xe8d4ff, rim: 0x9a6aff, amb: 0xc8b8f0,
+    fireCol: 0xc060ff, fogNear: 16, fogFar: 39,
+  },
+];
+
+/** 층 번호로 고정되는 난수 (같은 층은 늘 같은 배경) */
+function seeded(n) {
+  let a = (n * 1831565813 + 0x6d2b79f5) >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** 기본 색에 층마다 살짝 다른 색조를 얹는다 */
+function jitter(hex, rng, dh = 0.03, ds = 0.08, dl = 0.05) {
+  const c = new THREE.Color(hex);
+  const o = { h: 0, s: 0, l: 0 };
+  c.getHSL(o);
+  c.setHSL(
+    (o.h + (rng() - 0.5) * dh + 1) % 1,
+    Math.max(0, Math.min(1, o.s + (rng() - 0.5) * ds)),
+    Math.max(0.02, Math.min(0.95, o.l + (rng() - 0.5) * dl)));
+  return c;
+}
+
+function addEnv(obj) { envObjs.push(obj); scene.add(obj); return obj; }
+
+function clearEnv() {
+  envObjs.forEach((o) => {
+    scene.remove(o);
+    o.traverse((m) => {
+      if (!m.isMesh) return;
+      m.geometry.dispose();
+      (Array.isArray(m.material) ? m.material : [m.material]).forEach((mm) => mm && mm.dispose());
+    });
+  });
+  envObjs = [];
+}
+
+/**
+ * 전투 배경을 막(색 계통) + 층(형태 변주) 에 맞게 다시 만든다.
+ * 같은 층은 언제 다시 들어와도 같은 모습이고, 층이 바뀌면 조금씩 달라진다.
+ */
+export function setEnvironment(act = 1, floor = 1) {
+  if (!scene) return;
+  const a = Math.max(1, Math.min(3, act | 0));
+  const f = Math.max(1, floor | 0);
+  const key = `${a}:${f}`;
+  if (key === envKey) return;
+  envKey = key;
+  clearEnv();
+
+  const th = ACT_THEME[a - 1];
+  const rng = seeded(f * 7919 + a * 104729);
+
+  // 안개 / 조명 색조
+  const fogC = jitter(th.fog, rng, 0.02, 0.06, 0.03);
+  scene.fog = new THREE.Fog(fogC.getHex(), th.fogNear + rng() * 3 - 1.5, th.fogFar + rng() * 6 - 3);
+  if (lights.hemi) { lights.hemi.color.set(th.sky); lights.hemi.groundColor.set(th.gnd); }
+  if (lights.key) lights.key.color.set(th.key);
+  if (lights.rim) lights.rim.color.set(th.rim);
+  if (lights.amb) lights.amb.color.set(th.amb);
+  if (lights.fire) lights.fire.color.set(th.fireCol);
+
+  // 바닥
+  const gMat = new THREE.MeshStandardMaterial({
+    color: jitter(th.ground, rng, 0.02, 0.07, 0.05), roughness: 0.92, metalness: 0.05, flatShading: true });
+  groundMesh = new THREE.Mesh(new THREE.CircleGeometry(16, 40 + Math.floor(rng() * 5) * 4), gMat);
+  groundMesh.rotation.x = -Math.PI / 2;
+  groundMesh.rotation.z = rng() * Math.PI;
+  groundMesh.receiveShadow = true;
+  addEnv(groundMesh);
+
+  // 바닥 무늬 링 (층마다 크기/개수가 다름)
+  const ringN = 1 + Math.floor(rng() * 3);
+  for (let i = 0; i < ringN; i++) {
+    const r = 3.2 + i * (1.6 + rng() * 1.4);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r, r + 0.10 + rng() * 0.16, 36),
+      new THREE.MeshBasicMaterial({ color: jitter(th.accent2, rng, 0.04, 0.1, 0.06), transparent: true, opacity: 0.10 + rng() * 0.08 }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.015;
+    addEnv(ring);
+  }
+
+  // 배경 기둥 (무대 뒤쪽에만 — 카메라 앞을 가리지 않는다)
+  const pMat = new THREE.MeshStandardMaterial({ color: jitter(th.pillar, rng, 0.02, 0.06, 0.05), roughness: 1, flatShading: true });
+  const pN = 7 + Math.floor(rng() * 5);
+  const sides = 5 + Math.floor(rng() * 3);
+  for (let i = 0; i < pN; i++) {
+    const h = 6 + rng() * 7;
+    const x = -13.5 + (i + rng() * 0.8) * (27 / pN);
+    const z = -7.5 - rng() * 9;
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.42 + rng() * 0.3, 0.62 + rng() * 0.4, h, sides), pMat);
+    p.position.set(x, h / 2 - 0.5, z);
+    p.rotation.y = rng() * Math.PI;
+    p.receiveShadow = true;
+    addEnv(p);
+  }
+
+  // 뒤쪽 아치 (개수·높이·간격이 층마다 다름)
+  const aMat = new THREE.MeshStandardMaterial({ color: jitter(th.arch, rng, 0.02, 0.06, 0.05), roughness: 1, flatShading: true });
+  const aN = 2 + Math.floor(rng() * 3);
+  const aGap = 5.5 + rng() * 2.6;
+  for (let i = 0; i < aN; i++) {
+    const rr = 2.6 + rng() * 1.2;
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.28 + rng() * 0.16, 5, 14, Math.PI), aMat);
+    arch.position.set((i - (aN - 1) / 2) * aGap, 1.9 + rng() * 1.2, -11 - rng() * 2.5);
+    addEnv(arch);
+  }
+
+  buildProps(th, rng);
+}
+
+/** 층마다 다른 소품 2종을 골라 배치한다 */
+function buildProps(th, rng) {
+  const kinds = ['rubble', 'chain', 'torch', 'crystal', 'step'];
+  const pick = [];
+  while (pick.length < 2) {
+    const k = kinds[Math.floor(rng() * kinds.length)];
+    if (!pick.includes(k)) pick.push(k);
+  }
+  const em = (col, i = 1.4) => new THREE.MeshStandardMaterial({
+    color: col, emissive: new THREE.Color(col), emissiveIntensity: i, roughness: 0.4, flatShading: true });
+  const side = () => (rng() < 0.5 ? -1 : 1) * (5.5 + rng() * 6);
+
+  pick.forEach((k) => {
+    if (k === 'rubble') {                    // 흩어진 돌무더기
+      const m = new THREE.MeshStandardMaterial({ color: jitter(th.pillar, rng, 0.02, 0.08, 0.08), roughness: 1, flatShading: true });
+      const n = 4 + Math.floor(rng() * 5);
+      for (let i = 0; i < n; i++) {
+        const sz = 0.3 + rng() * 0.6;
+        const r = new THREE.Mesh(new THREE.IcosahedronGeometry(sz, 0), m);
+        r.position.set(side(), sz * 0.45, -2 - rng() * 7);
+        r.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+        addEnv(r);
+      }
+    } else if (k === 'chain') {              // 위에서 늘어진 사슬
+      const m = new THREE.MeshStandardMaterial({ color: jitter(th.arch, rng, 0.02, 0.08, 0.12), roughness: 0.7, metalness: 0.6 });
+      const n = 3 + Math.floor(rng() * 4);
+      for (let i = 0; i < n; i++) {
+        const h = 3 + rng() * 5;
+        const c = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, h, 4), m);
+        c.position.set(side(), 10 - h / 2, -6 - rng() * 5);
+        addEnv(c);
+      }
+    } else if (k === 'torch') {              // 벽 횃불 (조명 대신 발광 메시)
+      const poleM = new THREE.MeshStandardMaterial({ color: 0x2e2620, roughness: 1 });
+      const flameM = em(th.accent, 2.2);
+      const n = 2 + Math.floor(rng() * 3);
+      for (let i = 0; i < n; i++) {
+        const g = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 5), poleM);
+        pole.position.y = 1.3;
+        g.add(pole);
+        const fl = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.62, 6), flameM);
+        fl.position.y = 2.75;
+        g.add(fl);
+        g.position.set(side(), 0, -5 - rng() * 6);
+        g.userData.flicker = fl;
+        addEnv(g);
+      }
+    } else if (k === 'crystal') {            // 떠 있는 수정
+      const m = em(th.accent2, 1.1);
+      const n = 3 + Math.floor(rng() * 4);
+      for (let i = 0; i < n; i++) {
+        const sz = 0.22 + rng() * 0.4;
+        const c = new THREE.Mesh(new THREE.OctahedronGeometry(sz, 0), m);
+        c.position.set(side(), 1.6 + rng() * 4, -4 - rng() * 7);
+        c.userData.float = { y: c.position.y, sp: 0.5 + rng(), ph: rng() * 6 };
+        addEnv(c);
+      }
+    } else if (k === 'step') {               // 뒤쪽 계단/단
+      const m = new THREE.MeshStandardMaterial({ color: jitter(th.ground, rng, 0.02, 0.06, 0.08), roughness: 1, flatShading: true });
+      const n = 2 + Math.floor(rng() * 3);
+      const w = 7 + rng() * 5;
+      for (let i = 0; i < n; i++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(w - i * 1.2, 0.5, 1.6), m);
+        b.position.set((rng() - 0.5) * 3, 0.25 + i * 0.5, -8.5 - i * 1.5);
+        addEnv(b);
+      }
+    }
+  });
+}
+
 // ---------------- 초기화 ----------------
 export function initScene(canvas) {
   canvasEl = canvas;
@@ -54,50 +269,26 @@ export function initScene(canvas) {
   camera.position.set(0, 3.4, 11);
   camera.lookAt(0, 1.7, 0);
 
-  const hemi = new THREE.HemisphereLight(0xa8b8e8, 0x4a3040, 1.35);
-  scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xffe6c0, 1.9);
-  key.position.set(4, 9, 7);
-  scene.add(key);
-  const rim = new THREE.DirectionalLight(0x8a7aff, 1.0);
-  rim.position.set(-6, 5, -6);
-  scene.add(rim);
-  scene.add(new THREE.AmbientLight(0xc8c0e8, 0.62));
+  lights.hemi = new THREE.HemisphereLight(0xa8b8e8, 0x4a3040, 1.35);
+  scene.add(lights.hemi);
+  lights.key = new THREE.DirectionalLight(0xffe6c0, 1.9);
+  lights.key.position.set(4, 9, 7);
+  scene.add(lights.key);
+  lights.rim = new THREE.DirectionalLight(0x8a7aff, 1.0);
+  lights.rim.position.set(-6, 5, -6);
+  scene.add(lights.rim);
+  lights.amb = new THREE.AmbientLight(0xc8c0e8, 0.62);
+  scene.add(lights.amb);
   const fire = new THREE.PointLight(0xff9a5a, 1.5, 26, 2);
   fire.position.set(0, 2.5, 5);
   scene.add(fire);
   scene.userData.fire = fire;
+  lights.fire = fire;
 
   root = new THREE.Group();
   scene.add(root);
 
-  // 바닥
-  const gGeo = new THREE.CircleGeometry(16, 48);
-  const gMat = new THREE.MeshStandardMaterial({ color: 0x4a4062, roughness: 0.92, metalness: 0.05 });
-  groundMesh = new THREE.Mesh(gGeo, gMat);
-  groundMesh.rotation.x = -Math.PI / 2;
-  groundMesh.receiveShadow = true;
-  scene.add(groundMesh);
-
-  // 배경 기둥 (카메라 뒤/앞을 가리지 않도록 무대 뒤쪽에만 배치)
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3b3350, roughness: 1 });
-  for (let i = 0; i < 9; i++) {
-    const h = 7 + (i % 4) * 2.5;
-    const x = -13 + i * 3.25 + (i % 2 ? 0.9 : -0.7);
-    const z = -7.5 - (i % 3) * 3.2;
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.8, h, 6), pillarMat);
-    p.position.set(x, h / 2 - 0.5, z);
-    p.castShadow = false;
-    p.receiveShadow = true;
-    scene.add(p);
-  }
-  // 뒤쪽 아치 장식
-  const archMat = new THREE.MeshStandardMaterial({ color: 0x342c48, roughness: 1 });
-  for (let i = 0; i < 3; i++) {
-    const arch = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.35, 5, 14, Math.PI), archMat);
-    arch.position.set(-7 + i * 7, 2.4, -11.5);
-    scene.add(arch);
-  }
+  setEnvironment(1, 1);   // 기본 배경 (전투 시작 시 층에 맞게 다시 만든다)
 
   makeBlobTexture();
   clock = new THREE.Clock();
@@ -860,6 +1051,17 @@ function renderFrame() {
   const fire = scene.userData.fire;
   if (fire) fire.intensity = 1.0 + Math.sin(t * 7.3) * 0.18 + Math.sin(t * 13.1) * 0.09;
 
+  // 배경 소품 : 횃불 일렁임 / 수정 부유
+  envObjs.forEach((o, i) => {
+    const fl = o.userData.flicker;
+    if (fl) fl.scale.set(1, 1 + Math.sin(t * 8 + i) * 0.16, 1);
+    const fo = o.userData.float;
+    if (fo) {
+      o.position.y = fo.y + Math.sin(t * fo.sp + fo.ph) * 0.22;
+      o.rotation.y += dt * 0.5;
+    }
+  });
+
   // 트윈
   for (let i = tweens.length - 1; i >= 0; i--) {
     const tw = tweens[i];
@@ -889,6 +1091,9 @@ export function debugInfo() {
     models: models.size,
     sceneChildren: scene.children.length,
     rootChildren: root.children.length,
+    env: envKey,
+    envSig: envObjs.map((o) => [o.type[0], o.position.toArray().map((v) => v.toFixed(2)).join(',')].join(':')).join('|'),
+    fog: scene.fog ? '#' + scene.fog.color.getHexString() : null,
     cam: { fov: camera.fov, pos: camera.position.toArray(), aspect: camera.aspect },
     firstModelPos: models.size ? [...models.values()][0].group.position.toArray() : null,
     lastError: lastError ? String(lastError) : null,

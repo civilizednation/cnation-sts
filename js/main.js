@@ -399,6 +399,8 @@ function startBattle(encounter) {
   G.logLines = [];
   const canvas = $('#three-canvas');
   if (!G.sceneReady) { S3.initScene(canvas); G.sceneReady = true; }
+  // 막마다 색 계통이 다르고, 층마다 조금씩 다른 배경을 만든다
+  S3.setEnvironment(G.run.act, G.run.floor);
   S3.resize();
 
   const B = new Battle(G.run, encounter, battleUI);
