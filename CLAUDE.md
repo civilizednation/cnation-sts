@@ -73,6 +73,7 @@ js/ui/
   cardview.js              카드 렌더러 (ART 맵에 새 카드 id 반드시 추가)
 js/three/
   scene3d.js               전투 씬 (캐릭터/몬스터/연출)
+  items3d.js               유물·물약·골드·체력 3D 아이콘 굽기 (PNG 데이터 URL 캐시)
   map3d.js                 3D 지도 (노드 아이콘/경로/레이캐스트)
 ```
 

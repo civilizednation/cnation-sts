@@ -17,6 +17,7 @@ import { STANCE_KR } from './engine/battle.js';
 import { MONSTERS } from './data/monsters.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
+import * as I3 from './three/items3d.js';
 import { SFX, unlockAudio, setSfxEnabled, isSfxEnabled } from './audio.js';
 import * as S3 from './three/scene3d.js';
 import * as M3 from './three/map3d.js';
@@ -35,6 +36,7 @@ const G = {
 };
 window.G = G;
 window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
+window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // 자동 테스트용
 
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-modal'];
 function showScreen(id) {
@@ -87,7 +89,7 @@ function renderModalStatus(focus) {
     const pot = run.potions[i];
     const d = pot ? POTIONS[pot.id] : null;
     slots += d
-      ? `<span class="ms-slot filled" style="border-color:${d.color}" title="${d.name}">${svgIcon('potion', { size: 15, color: d.color })}</span>`
+      ? `<span class="ms-slot filled" style="border-color:${d.color}" title="${d.name}">${potionHTML(d, 17)}</span>`
       : `<span class="ms-slot"></span>`;
   }
 
@@ -257,29 +259,94 @@ function renderTopbar(target) {
   const bar = $(target);
   if (!run || !bar) return;
   bar.innerHTML = '';
-  bar.append(
-    el('div', { class: 'tb-floor', text: `${run.act}막 · ${run.floor || 0}층` }),
-    (() => {
-      const w = el('div', { class: 'tb-hp' });
-      const pct = clamp(run.player.hp / run.player.maxHp, 0, 1) * 100;
-      w.innerHTML = `<div class="hpbar"><i style="width:${pct}%"></i><b>${run.player.hp} / ${run.player.maxHp}</b></div>`;
-      return w;
-    })(),
-    el('div', { class: 'tb-gold', text: `${run.gold}G` }),
-    (() => {
-      const r = el('div', { class: 'relic-row' });
-      run.relics.forEach((ro) => {
-        const d = RELICS[ro.id];
-        if (!d) return;
-        const b = el('div', { class: 'relic' + (d.rarity === 'boss' ? ' boss' : ''), html: relicIcon(d, 16) });
-        b.addEventListener('click', (e) => showTooltip(e, d.name, d.desc + (ro.counter ? `\n(${ro.counter})` : '')));
-        r.appendChild(b);
-      });
-      return r;
-    })(),
-    el('button', { class: 'menu-btn', html: '<span></span><span></span><span></span>',
-      onclick: () => { SFX.tap(); showGameMenu(); } }),
-  );
+
+  // --- 1행 : 체력 · 골드 · 물약 · 층 ---
+  const top = el('div', { class: 'tb-row1' });
+  const hp = el('div', { class: 'tb-hp' + (run.player.hp / Math.max(1, run.player.maxHp) <= 0.3 ? ' low' : '') });
+  hp.append(itemIcon(I3.heartIcon3D(), 'heart', 20),
+    el('b', { text: `${run.player.hp}/${run.player.maxHp}` }));
+  top.appendChild(hp);
+
+  const gold = el('div', { class: 'tb-gold' });
+  gold.append(itemIcon(I3.goldIcon3D(), 'ring', 20), el('b', { text: String(run.gold) }));
+  top.appendChild(gold);
+
+  top.appendChild(potionRow());
+  top.appendChild(el('div', { class: 'tb-floor', text: `${run.act}막 · ${run.floor || 0}층` }));
+  top.appendChild(el('button', { class: 'menu-btn', html: '<span></span><span></span><span></span>',
+    onclick: () => { SFX.tap(); showGameMenu(); } }));
+  bar.appendChild(top);
+
+  // --- 2행 : 유물 (왼쪽부터 차례로) ---
+  const r = el('div', { class: 'relic-row' });
+  run.relics.forEach((ro) => {
+    const d = RELICS[ro.id];
+    if (!d) return;
+    const b = el('div', { class: 'relic' + (d.rarity === 'boss' ? ' boss' : '') });
+    b.appendChild(relicMark(d, 30));
+    if (ro.counter) b.appendChild(el('i', { class: 'relic-count', text: String(ro.counter) }));
+    b.addEventListener('click', (e) => showTooltip(e, d.name, d.desc + (ro.counter ? `\n(${ro.counter})` : '')));
+    r.appendChild(b);
+  });
+  bar.appendChild(el('div', { class: 'tb-row2' + (run.relics.length ? '' : ' empty') }, r));
+}
+
+/** 데이터 URL 이 있으면 3D 아이콘 <img>, 없으면 SVG 로 대체 */
+function itemIcon(url, fallbackGlyph, px, color) {
+  return url
+    ? el('img', { class: 'i3d', src: url, style: { width: px + 'px', height: px + 'px' } })
+    : el('i', { class: 'i3d', style: { width: px + 'px', height: px + 'px' },
+        html: svgIcon(fallbackGlyph, { size: px, color: color || '#d8d0e8' }) });
+}
+
+/** 유물 3D 마크 (실패 시 기존 SVG) */
+function relicMark(def, px = 30) {
+  const url = I3.relicIcon3D(def);
+  return url
+    ? el('img', { class: 'i3d', src: url, alt: def.name, style: { width: px + 'px', height: px + 'px' } })
+    : el('i', { class: 'i3d', style: { width: px + 'px', height: px + 'px' }, html: relicIcon(def, px) });
+}
+
+/** innerHTML 템플릿에서 쓰는 3D 아이콘 문자열 (실패 시 기존 SVG) */
+const imgTag = (url, px) => `<img class="i3d" src="${url}" style="width:${px}px;height:${px}px">`;
+function relicHTML(d, px = 26) {
+  const u = I3.relicIcon3D(d);
+  return u ? imgTag(u, px) : relicIcon(d, px);
+}
+function potionHTML(d, px = 26) {
+  const u = I3.potionIcon3D(d);
+  return u ? imgTag(u, px) : svgIcon('potion', { size: px, color: d.color });
+}
+function goldHTML(px = 26) {
+  const u = I3.goldIcon3D();
+  return u ? imgTag(u, px) : svgIcon('ring', { size: px, color: '#e8c34a' });
+}
+
+/** 물약 3D 마크 */
+function potionMark(def, px = 28) {
+  const url = I3.potionIcon3D(def);
+  return url
+    ? el('img', { class: 'i3d', src: url, alt: def.name, style: { width: px + 'px', height: px + 'px' } })
+    : el('i', { class: 'i3d', style: { width: px + 'px', height: px + 'px' },
+        html: svgIcon('potion', { size: px, color: def.color }) });
+}
+
+/** 상단바에 들어가는 물약 슬롯 줄 */
+function potionRow() {
+  const run = G.run;
+  const row = el('div', { class: 'potion-row' });
+  for (let i = 0; i < run.potionSlots; i++) {
+    const p = run.potions[i];
+    const slot = el('div', { class: 'potion-slot' + (p ? ' filled' : '') });
+    if (p) {
+      const d = POTIONS[p.id];
+      slot.style.borderColor = d.color;
+      slot.appendChild(potionMark(d, 24));
+      slot.addEventListener('click', (e) => { e.stopPropagation(); usePotionPrompt(i); });
+    }
+    row.appendChild(slot);
+  }
+  return row;
 }
 
 /** 전투/지도 공통 메뉴 */
@@ -324,7 +391,6 @@ function goMap() {
   renderTopbar('#battle-top');
   renderTopbar('#map-top');
   renderMap();
-  renderPotions('#map-potion-row');
   saveRun(G.run);
 }
 
@@ -519,7 +585,6 @@ function renderBattle() {
   $('#discard-count').textContent = B.discardPile.length;
   $('#exhaust-count').textContent = B.exhaustPile.length;
   $('#energy-text').textContent = `${B.energy}/${B.baseEnergy}`;
-  renderPotions();
   renderHand();
   renderUnits();
   if (B.usesOrbs) { S3.syncOrbs(B.orbs, B.orbSlots); renderOrbLabels(B); }
@@ -528,22 +593,9 @@ function renderBattle() {
   et.classList.toggle('ready', B.playerTurn && !B.hand.some((c) => B.canPlay(c)));
 }
 
-function renderPotions(sel = '#potion-row') {
-  const row = $(sel);
-  const run = G.run;
-  if (!row || !run) return;
-  row.innerHTML = '';
-  for (let i = 0; i < run.potionSlots; i++) {
-    const p = run.potions[i];
-    const slot = el('div', { class: 'potion-slot' + (p ? ' filled' : '') });
-    if (p) {
-      const d = POTIONS[p.id];
-      slot.style.borderColor = d.color;
-      slot.innerHTML = svgIcon('potion', { size: 20, color: d.color });
-      slot.addEventListener('click', (e) => { e.stopPropagation(); usePotionPrompt(i); });
-    }
-    row.appendChild(slot);
-  }
+/** 물약은 상단바 1행에 있으므로 해당 상단바를 다시 그린다 */
+function renderPotions() {
+  renderTopbar(G.battle ? '#battle-top' : '#map-top');
 }
 
 function renderUnits() {
@@ -821,7 +873,7 @@ function usePotionPrompt(idx) {
   openModal((box) => {
     box.append(
       modalTitle(d.name),
-      el('div', { class: 'relic-big', html: svgIcon('potion', { size: 26, color: d.color }) }),
+      el('div', { class: 'relic-big', html: potionHTML(d, 30) }),
       modalText(d.desc(mult)),
       el('div', { class: 'modal-actions' },
         el('button', {
@@ -850,7 +902,7 @@ async function usePotion(idx, target) {
   SFX.potion();
   await d.use(G.battle, mult, target, run);
   if (G.battle) { S3.layoutEnemies(G.battle); renderBattle(); G.battle.checkEnd(); if (G.battle.over) G.battle.finish(); }
-  else { renderTopbar('#map-top'); renderPotions('#map-potion-row'); }
+  else renderTopbar('#map-top');
   saveRun(run);
 }
 
@@ -1082,13 +1134,13 @@ function rewardRow(rw, idx, taken, rebuild) {
   const take = () => { taken.add(idx); saveRun(run); renderTopbar('#map-top'); rebuild(); };
 
   if (rw.type === 'gold') {
-    row.innerHTML = `<div class="relic-big" style="border-color:#e8c34a">${svgIcon('ring', { size: 22, color: '#e8c34a' })}</div><span>골드 ${rw.amount}</span>`;
+    row.innerHTML = `<div class="relic-big" style="border-color:#e8c34a">${goldHTML(26)}</div><span>골드 ${rw.amount}</span>`;
     row.addEventListener('click', () => { SFX.gold(); run.gainGold(rw.amount); take(); });
 
   } else if (rw.type === 'potion') {
     const d = POTIONS[rw.id];
     if (!d) return null;
-    row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${svgIcon('potion', { size: 22, color: d.color })}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc(1)}</small></div>`;
+    row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 26)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc(1)}</small></div>`;
     row.addEventListener('click', () => {
       if (!run.addPotion(rw.id)) { toast('물약 슬롯이 가득 찼습니다.'); return; }
       SFX.potion(); take();
@@ -1097,7 +1149,7 @@ function rewardRow(rw, idx, taken, rebuild) {
   } else if (rw.type === 'relic') {
     const d = RELICS[rw.id];
     if (!d) return null;
-    row.innerHTML = `<div class="relic-big">${relicIcon(d, 24)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div>`;
+    row.innerHTML = `<div class="relic-big">${relicHTML(d, 28)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div>`;
     row.addEventListener('click', async () => { await gainRelic(rw.id); take(); });
 
   } else if (rw.type === 'card') {
@@ -1146,7 +1198,7 @@ function afterBoss() {
     choices.forEach((id) => {
       const d = RELICS[id];
       const row = el('button', { class: 'reward-row' });
-      row.innerHTML = `<div class="relic-big" style="border-color:#b04aff">${relicIcon(d, 24)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div>`;
+      row.innerHTML = `<div class="relic-big" style="border-color:#b04aff">${relicHTML(d, 28)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc}</small></div>`;
       row.addEventListener('click', async () => {
         closeModal();
         await gainRelic(id);
@@ -1339,7 +1391,7 @@ function showShop() {
         if (it.sold) return;
         const d = RELICS[it.id];
         const row = el('button', { class: 'reward-row' });
-        row.innerHTML = `<div class="relic-big">${relicIcon(d, 24)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
+        row.innerHTML = `<div class="relic-big">${relicHTML(d, 28)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
         row.addEventListener('click', async () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           run.spendGold(it.price); it.sold = true;
@@ -1352,7 +1404,7 @@ function showShop() {
         if (it.sold) return;
         const d = POTIONS[it.id];
         const row = el('button', { class: 'reward-row' });
-        row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${svgIcon('potion', { size: 22, color: d.color })}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc(1)}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
+        row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 26)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc(1)}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
         row.addEventListener('click', () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           if (!run.addPotion(it.id)) { toast('물약 슬롯이 가득 찼습니다.'); return; }
@@ -1503,7 +1555,7 @@ function showRelicList() {
       const d = RELICS[ro.id];
       if (!d) return;
       const row = el('div', { class: 'reward-row' });
-      row.innerHTML = `<div class="relic-big">${relicIcon(d, 24)}</div><div><b style="color:#e8c34a">${d.name}</b> <small style="color:#7a7288">${RELIC_RARITY_KR[d.rarity]}</small><br><small style="color:#9a92a8">${d.desc}</small></div>`;
+      row.innerHTML = `<div class="relic-big">${relicHTML(d, 28)}</div><div><b style="color:#e8c34a">${d.name}</b> <small style="color:#7a7288">${RELIC_RARITY_KR[d.rarity]}</small><br><small style="color:#9a92a8">${d.desc}</small></div>`;
       box.appendChild(row);
     });
     box.append(el('div', { class: 'modal-actions' },
