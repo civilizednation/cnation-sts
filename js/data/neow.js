@@ -138,6 +138,33 @@ export const NEOW_DRAWBACKS = [
     } },
 ];
 
+/**
+ * 숨겨진 다섯 번째 선택지.
+ * 시작 보너스 화면에서 네 번째 항목 아래, 아무 표시 없는 자리를 누르면 발동한다.
+ * 최대 체력 · 공격 카드 피해 · 방어 카드 방어도 · 물약 효과가 모두 2배가 되고
+ * 일반 유물 1개와 엘리트 유물 1개를 들고 시작한다.
+ */
+export const NEOW_SECRET = {
+  id: 'secret',
+  apply: async (run, ctx) => {
+    run.cheat = true;
+    run.gainMaxHp(run.player.maxHp);          // 최대 체력 2배 + 그만큼 회복
+    run.player.hp = run.player.maxHp;
+    const got = [];
+    const common = run.pickRelic('common');
+    if (common) { await ctx.gainRelic(common); got.push(ctx.relicName(common)); }
+    const elite = run.relicReward();           // 엘리트를 잡았을 때 나오는 유물
+    if (elite) { await ctx.gainRelic(elite); got.push(ctx.relicName(elite)); }
+    const lines = [
+      '첨탑이 잠시 숨을 멈춘다.',
+      `최대 체력이 ${run.player.maxHp}이 되었다.`,
+      '공격 카드의 피해, 방어 카드의 방어도, 물약의 효과가 모두 2배가 된다.',
+    ];
+    if (got.length) lines.push(`${got.join(', ')}을(를) 얻었다.`);
+    return lines.join('\n');
+  },
+};
+
 /** 이번 런에서 제시할 보너스 4개 (혜택 3 + 대가 1) */
 export function rollNeowOptions(rng) {
   const benefits = rng.shuffle(NEOW_BENEFITS.slice()).slice(0, 3);

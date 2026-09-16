@@ -150,6 +150,7 @@ export class Battle {
       if (this.stance === 'wrath') d *= 2;
       else if (this.stance === 'divinity') d *= 3;
       if (this.pow(src, 'doubleDamage') > 0) d *= 2;
+      if (card && this.run.cheat) d *= 2;   // 숨겨진 시작 보너스 : 공격 카드 피해 2배
     }
     if (dst.isPlayer && this.stance === 'wrath') d *= 2;
     if (this.pow(src, 'weak') > 0) d *= 0.75;
@@ -330,6 +331,7 @@ export class Battle {
     if (amount <= 0) return;
     let v = amount;
     if (!raw) {
+      if (actor.isPlayer && card && this.run.cheat) v *= 2;   // 숨겨진 시작 보너스 : 방어 카드 방어도 2배
       v += this.pow(actor, 'dexterity');
       if (this.pow(actor, 'frail') > 0) v = Math.floor(v * 0.75);
     }

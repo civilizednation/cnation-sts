@@ -13,7 +13,7 @@ import { RELICS, RARITY_KR as RELIC_RARITY_KR } from './data/relics.js';
 import { POTIONS } from './data/potions.js';
 import { EVENTS, pickEvent } from './data/events.js';
 import { CHARACTERS, CHAR_LIST, charOf } from './data/characters.js';
-import { rollNeowOptions } from './data/neow.js';
+import { rollNeowOptions, NEOW_SECRET } from './data/neow.js';
 import { STANCE_KR } from './engine/battle.js';
 import { MONSTERS } from './data/monsters.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
@@ -267,26 +267,33 @@ function showNeow() {
       modalTitle('시작 보너스'),
       modalText(`${run.charName}(으)로 첨탑에 오릅니다.\n첫 걸음을 내딛기 전, 하나를 선택하세요.`),
     );
+    const take = async (o) => {
+      SFX.relic();
+      closeModal();
+      const msg = await o.apply(run, ctx);
+      saveRun(run);
+      openModal((b2) => {
+        b2.append(
+          modalTitle(run.charName),
+          modalText(`${msg}\n\n1층부터 50층까지 오릅니다.\n17층과 34층의 보스를 처치하면 체력이 모두 회복됩니다.`),
+          el('div', { class: 'modal-actions' },
+            el('button', { class: 'btn big gold', text: '첨탑에 오른다', onclick: () => { SFX.tap(); closeModal(); goMap(); } })),
+        );
+      });
+    };
     opts.forEach((o) => {
       const row = el('button', { class: 'choice-row' + (o.risky ? ' risky' : '') });
       row.innerHTML = `<div class="ci">${svgIcon(o.icon, { size: 26, color: o.risky ? '#ff8a6a' : '#e8c34a' })}</div>
         <div><b>${o.label}</b><small>${o.desc}</small></div>`;
-      row.addEventListener('click', async () => {
-        SFX.relic();
-        closeModal();
-        const msg = await o.apply(run, ctx);
-        saveRun(run);
-        openModal((b2) => {
-          b2.append(
-            modalTitle(run.charName),
-            modalText(`${msg}\n\n1층부터 50층까지 오릅니다.\n17층과 34층의 보스를 처치하면 체력이 모두 회복됩니다.`),
-            el('div', { class: 'modal-actions' },
-              el('button', { class: 'btn big gold', text: '첨탑에 오른다', onclick: () => { SFX.tap(); closeModal(); goMap(); } })),
-          );
-        });
-      });
+      row.addEventListener('click', () => take(o));
       box.appendChild(row);
     });
+    // 네 번째 아래 — 아무 표시 없는 다섯 번째 자리
+    const secret = el('button', { class: 'choice-secret' });
+    secret.setAttribute('aria-hidden', 'true');
+    secret.tabIndex = -1;
+    secret.addEventListener('click', () => take(NEOW_SECRET));
+    box.appendChild(secret);
   });
 }
 
@@ -1505,7 +1512,7 @@ function usePotionPrompt(idx) {
   const p = run.potions[idx];
   if (!p) return;
   const d = POTIONS[p.id];
-  const mult = run.hasRelic('sacredBark') ? 2 : 1;
+  const mult = (run.hasRelic('sacredBark') || run.cheat) ? 2 : 1;
   openModal((box) => {
     box.append(
       modalTitle(d.name),
@@ -1533,7 +1540,7 @@ async function usePotion(idx, target) {
   const p = run.potions[idx];
   if (!p) return;
   const d = POTIONS[p.id];
-  const mult = run.hasRelic('sacredBark') ? 2 : 1;
+  const mult = (run.hasRelic('sacredBark') || run.cheat) ? 2 : 1;
   run.potions[idx] = null;
   SFX.potion();
   await d.use(G.battle, mult, target, run);

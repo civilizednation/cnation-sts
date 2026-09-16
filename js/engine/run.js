@@ -58,6 +58,8 @@ export class Run {
     this.monsterQueue = [];
     this.eliteQueue = [];
     this.unknownChance = { monster: 10, shop: 3, treasure: 2 };
+    // 시작 보너스 화면의 숨겨진 선택지 — 최대 체력·공격·방어·물약 효과가 2배
+    this.cheat = false;
     this.usedEvents = [];
     this.stats = { kills: 0, elites: 0, bosses: 0, damageTaken: 0, floorsClimbed: 0 };
     this.buildAct(1);
@@ -401,7 +403,7 @@ export class Run {
       mapPos: this.mapPos, flags: this.flags, stats: this.stats,
       monsterCount: this.monsterCount, cardRarityBonus: this.cardRarityBonus,
       potionChance: this.potionChance, bossEncounter: this.bossEncounter,
-      usedEvents: this.usedEvents, unknownChance: this.unknownChance,
+      usedEvents: this.usedEvents, unknownChance: this.unknownChance, cheat: this.cheat,
     };
   }
 
@@ -422,6 +424,7 @@ export class Run {
     r.bossEncounter = o.bossEncounter;
     r.usedEvents = o.usedEvents || [];
     r.unknownChance = o.unknownChance || { monster: 10, shop: 3, treasure: 2 };
+    r.cheat = !!o.cheat;
     r.monsterQueue = r.rng.shuffle(ENCOUNTERS[r.act].weak.slice());
     r.strongQueue = r.rng.shuffle(ENCOUNTERS[r.act].strong.slice());
     r.eliteQueue = r.rng.shuffle(ENCOUNTERS[r.act].elite.slice());
