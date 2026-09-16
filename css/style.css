@@ -560,11 +560,7 @@ html, body {
 .cd-kw .kw-exhaust { color: #ff9a7a; } .cd-kw .kw-key { color: #9aff9a; }
 /* 길게 누르는 중 살짝 눌린 느낌 */
 .card.pressing .card-inner { filter: brightness(1.08); }
-/* 카드 설명의 용어에 점선 밑줄 — 길게 누르면 뜻을 볼 수 있다는 힌트 */
-.card-desc .kw-debuff, .card-desc .kw-buff, .card-desc .kw-block,
-.card-desc .kw-energy, .card-desc .kw-exhaust, .card-desc .kw-key {
-  border-bottom: 1px dotted currentColor;
-}
+/* 카드 설명의 용어는 색으로만 구분한다 (밑줄 없음) */
 
 /* ---------- 액션바 ---------- */
 .actionbar {
