@@ -40,9 +40,11 @@ window.G = G;
 window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // 자동 테스트용
 window.__fight = (ids) => startBattle({ monsters: ids, kind: 'boss' });     // 자동 테스트용
+window.__rewards = (rw, done) => showRewards(rw, done || (() => goMap()));  // 자동 테스트용
 
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex', 'scr-modal'];
 function showScreen(id) {
+  if (id !== 'scr-modal') clearModal();
   SCREENS.forEach((s) => { const e = $('#' + s); if (e) e.hidden = s !== id; });
   if (id === 'scr-title') requestAnimationFrame(() => { try { T3.resizeTitle(); } catch (e) { /* noop */ } });
 }
@@ -55,22 +57,62 @@ function toast(msg) {
 }
 
 // ---------------- 모달 ----------------
+//  기본 동작 : openModal 은 지금 떠 있는 모달을 갈아 끼우고, closeModal 은 모달을 닫는다.
+//  opts.stack = true 로 열면 원래 모달을 DOM 째로 보관해 두었다가
+//  closeModal 때 그대로 되돌린다. (보상 화면 위에 카드 상세 설명을 띄우는 경우 등)
+//  DOM 노드를 그대로 보관하므로 붙어 있던 이벤트 핸들러와 스크롤 위치가 유지된다.
 let modalStack = [];
+
+/** 지금 화면에 떠 있는 모달의 DOM 을 통째로 떼어내 보관용 스냅샷으로 만든다 */
+function snapshotModal() {
+  const box = $('#modal-box');
+  const st = $('#modal-status');
+  return {
+    nodes: Array.from(box.childNodes),
+    scroll: box.scrollTop,
+    status: st ? { nodes: Array.from(st.childNodes), hidden: st.hidden } : null,
+  };
+}
+
+/** snapshotModal 로 떠 둔 모달을 화면에 되돌린다 */
+function restoreModal(snap) {
+  const box = $('#modal-box');
+  const st = $('#modal-status');
+  box.replaceChildren(...snap.nodes);
+  if (st && snap.status) {
+    st.replaceChildren(...snap.status.nodes);
+    st.hidden = snap.status.hidden;
+  }
+  $('#scr-modal').hidden = false;
+  box.scrollTop = snap.scroll;
+}
+
 function openModal(builder, opts = {}) {
   const box = $('#modal-box');
-  box.innerHTML = '';
+  const open = !$('#scr-modal').hidden && box.childNodes.length > 0;
+  if (opts.stack && open) modalStack.push(snapshotModal());
+  else if (!opts.stack) modalStack = [];
+  box.replaceChildren();
   builder(box);
   // 보상·모닥불·상점 등에서 판단에 필요한 내 상태(체력·골드·물약칸)를 항상 띄워 준다
   renderModalStatus(opts.focus);
   $('#scr-modal').hidden = false;
-  modalStack.push(builder);
 }
+
+/** 위에 얹힌 모달이 있으면 그 아래 모달로 돌아가고, 없으면 모달을 닫는다 */
 function closeModal() {
-  $('#scr-modal').hidden = true;
-  $('#modal-box').innerHTML = '';
-  const st = $('#modal-status');
-  if (st) { st.hidden = true; st.innerHTML = ''; }
+  const prev = modalStack.pop();
+  if (prev) { restoreModal(prev); return; }
+  clearModal();
+}
+
+/** 쌓인 모달을 전부 버리고 완전히 닫는다 (화면 전환 시) */
+function clearModal() {
   modalStack = [];
+  $('#scr-modal').hidden = true;
+  $('#modal-box').replaceChildren();
+  const st = $('#modal-status');
+  if (st) { st.hidden = true; st.replaceChildren(); }
 }
 
 /**
@@ -1101,7 +1143,7 @@ function showCardDetail(card) {
 
     box.append(el('div', { class: 'modal-actions' },
       el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
-  });
+  }, { stack: true });
 }
 
 // ---- 길게 누르기 : 카드가 보이는 모든 화면에서 동작 ----
@@ -1120,7 +1162,7 @@ function consumedLongPress() {
 function initCardInspect() {
   document.addEventListener('pointerdown', (e) => {
     const node = e.target.closest && e.target.closest('.card');
-    if (!node || !node.__card || node.closest('.card-ghost')) return;
+    if (!node || !node.__card || node.closest('.card-ghost') || node.closest('.cd-card')) return;
     cancelLongPress();
     lpNode = node; lpX = e.clientX; lpY = e.clientY;
     lpTimer = setTimeout(() => {
