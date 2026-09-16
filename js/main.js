@@ -305,7 +305,8 @@ const HELP_SECTIONS = [
   ['눌러서 보는 정보', [
     ['카드 상세', '<b>카드를 길게 누르면</b>(약 0.4초) 상세 설명 화면이 뜹니다. 강화 후 효과와 그 카드에 쓰인 용어의 뜻까지 함께 보여 줍니다. 손패·보상·상점·덱 보기 어디서나 됩니다.'],
     ['적의 다음 행동', '적 머리 위의 <b>의도 아이콘을 탭</b>하면 그 행동이 무엇인지, 예상 피해와 거는 효과가 무엇인지 설명이 나옵니다.'],
-    ['유물 / 상태이상', '상단바의 유물이나 캐릭터 옆 상태이상 아이콘을 탭하면 설명이 나옵니다.'],
+    ['걸린 상태 전체', '<b>적이나 내 캐릭터를 탭하면</b> 지금 걸려 있는 상태(중독·약화·취약·힘 등)를 한 번에 모두 설명해 줍니다. 상태 아이콘이 작아도 정확히 누를 필요가 없습니다. (카드를 고르지 않은 상태에서)'],
+    ['유물', '상단바의 유물 아이콘을 탭하면 설명이 나옵니다.'],
     ['카드 더미', '"뽑을 / 버린 / 소각" 을 탭하면 그 더미에 어떤 카드가 있는지 볼 수 있습니다.'],
     ['백과사전', '타이틀 화면의 <b>백과사전</b> 버튼(게임 중에는 메뉴 ☰ → 백과사전)에서 카드 · 유물 · 물약 · 캐릭터 · 용어 전체를 찾아볼 수 있습니다.'],
   ]],
@@ -698,22 +699,64 @@ function intentTooltip(actor) {
   return { title, text: lines.join('\n') };
 }
 
+/**
+ * 유닛에 걸려 있는 상태를 한 번에 설명한다.
+ * 상태 칩(.pw)이 너무 작아 정확히 누르기 어려워서,
+ * 몬스터 본체나 머리 위 이름·체력바 어디를 눌러도 전체 설명이 뜨도록 했다.
+ */
+function statusTooltip(actor, isPlayer) {
+  const B = G.battle;
+  if (!B || !actor) return null;
+
+  const head = [`체력 ${Math.max(0, actor.hp)}/${actor.maxHp}`];
+  if (actor.block > 0) head.push(`방어도 ${actor.block}`);
+  if (isPlayer && B.stance && B.stance !== 'neutral') head.push(`자세 ${STANCE_KR[B.stance] || B.stance}`);
+
+  const rows = Object.entries(actor.powers)
+    .filter(([id, n]) => { const pd = POWERS[id]; return pd && !pd.hidden && n !== 0; })
+    .map(([id, n]) => {
+      const pd = POWERS[id];
+      const cls = pd.type === 'debuff' ? 'debuff' : 'buff';
+      const amount = pd.stack === 'none' ? '' : ` ${n}`;
+      return `<div class="tip-pw"><i class="${cls}">${pd.name}${amount}</i> ${powerDesc(id, n)}</div>`;
+    });
+
+  const body = `<div class="tip-head">${head.join(' · ')}</div>` + (rows.length
+    ? rows.join('')
+    : '<div class="tip-none">걸려 있는 상태가 없습니다.</div>');
+
+  return { title: actor.name, text: body, lines: rows.length };
+}
+
+/** 몬스터/플레이어를 눌렀을 때 상태 설명을 띄운다 */
+function showStatusInfo(actor, isPlayer, ev) {
+  const info = statusTooltip(actor, isPlayer);
+  if (!info) return;
+  SFX.tap();
+  showTooltip(ev, info.title, info.text, info.lines);
+}
+
 let tipTimer = null;
-function showTooltip(ev, title, text) {
+/** rows : 설명 줄 수 (여러 상태를 한꺼번에 띄울 때 읽을 시간을 더 준다) */
+function showTooltip(ev, title, text, rows = 0) {
   const tip = $('#tooltip');
   tip.innerHTML = `<b>${title}</b>${text.replace(/\n/g, '<br>')}`;
   tip.hidden = false;
   const r = tip.getBoundingClientRect();
-  const x = clamp(ev.clientX - r.width / 2, 8, innerWidth - r.width - 8);
-  const y = clamp(ev.clientY + 16, 8, innerHeight - r.height - 8);
+  const cx = ev ? ev.clientX : innerWidth / 2;
+  const cy = ev ? ev.clientY : innerHeight / 2;
+  const x = clamp(cx - r.width / 2, 8, innerWidth - r.width - 8);
+  // 아래로 열면 화면 밖으로 나가는 경우 위쪽에 띄운다
+  const below = cy + 16;
+  const y = below + r.height > innerHeight - 8 ? clamp(cy - 16 - r.height, 8, innerHeight - r.height - 8) : below;
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
   clearTimeout(tipTimer);
-  tipTimer = setTimeout(() => { tip.hidden = true; }, 2600);
+  tipTimer = setTimeout(() => { tip.hidden = true; }, Math.min(9000, 2600 + rows * 900));
 }
 document.addEventListener('pointerdown', (e) => {
   const tip = $('#tooltip');
-  if (!tip.hidden && !e.target.closest('.relic, .pw, .potion-slot, .intent')) tip.hidden = true;
+  if (!tip.hidden && !e.target.closest('.relic, .pw, .potion-slot, .intent, .unit, .unit-hit')) tip.hidden = true;
 }, true);
 
 // ============================================================
@@ -976,10 +1019,17 @@ function renderUnits() {
       if (!pd || pd.hidden || n === 0) return;
       const b = el('div', { class: 'pw ' + (pd.type === 'debuff' ? 'debuff' : 'buff'),
         html: powerIcon(id, 12, pd.type === 'debuff' ? '#e0a0ff' : '#ffe08a') + `<span>${pd.stack === 'none' ? '' : n}</span>` });
-      b.addEventListener('click', (e) => { e.stopPropagation(); showTooltip(e, pd.name, powerDesc(id, n)); });
+      // 칩 하나하나는 너무 작아서 따로 받지 않는다 — 탭은 유닛 전체가 받아 상태를 한꺼번에 설명한다
       pw.appendChild(b);
     });
     if (pw.children.length) u.appendChild(pw);
+    if (isPlayer) {
+      // 내 캐릭터 라벨을 눌러도 내게 걸린 상태를 전부 설명해 준다
+      u.addEventListener('click', (ev) => {
+        if (G.targeting || G.pendingPotion !== null || G.selectedCard) return;
+        showStatusInfo(actor, true, ev);
+      });
+    }
     if (!isPlayer) {
       // 의도 배지를 누르면 그 행동이 무엇인지 설명해 준다
       const badge = u.querySelector('.intent');
@@ -993,7 +1043,7 @@ function renderUnits() {
           if (info) showTooltip(ev, `${actor.name} — ${info.title}`, info.text);
         });
       }
-      u.addEventListener('click', () => onTargetTap(actor));
+      u.addEventListener('click', (ev) => onTargetTap(actor, ev));
     }
     return u;
   };
@@ -1003,7 +1053,7 @@ function renderUnits() {
   B.enemies.filter((e) => e.alive).forEach((e) => {
     const hit = el('div', { class: 'unit-hit' + (G.targeting ? ' targetable' : '') });
     hit.dataset.uid = e.uid;
-    hit.addEventListener('click', () => onTargetTap(e));
+    hit.addEventListener('click', (ev) => onTargetTap(e, ev));
     ov.appendChild(hit);
   });
   if (B.usesOrbs) renderOrbLabels(B);
@@ -1399,7 +1449,7 @@ function onCardTap(card) {
   renderBattle();
 }
 
-function onTargetTap(enemy) {
+function onTargetTap(enemy, ev) {
   const B = G.battle;
   if (G.pendingPotion !== null) {
     const idx = G.pendingPotion;
@@ -1408,7 +1458,11 @@ function onTargetTap(enemy) {
     usePotion(idx, enemy);
     return;
   }
-  if (!G.targeting || !G.selectedCard) return;
+  // 카드를 고르지 않은 상태에서 몬스터를 누르면 걸려 있는 상태를 전부 설명한다
+  if (!G.targeting || !G.selectedCard) {
+    if (!G.selectedCard) showStatusInfo(enemy, false, ev);
+    return;
+  }
   const card = G.selectedCard;
   G.targeting = false;
   playCardNow(card, enemy);

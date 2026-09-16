@@ -726,6 +726,14 @@ html, body {
   font-size: 12px; line-height: 1.45; box-shadow: 0 6px 20px rgba(0,0,0,.7); pointer-events: none;
 }
 .tooltip b { color: var(--gold); display: block; margin-bottom: 2px; }
+/* 유닛 상태 설명 (중독·약화 등 여러 개를 한 번에) */
+.tooltip .tip-head { color: #9a92a8; font-size: 11px; margin-bottom: 4px; }
+.tooltip .tip-pw { margin-top: 5px; padding-top: 5px; border-top: 1px solid #2a2338; color: var(--text-dim); }
+.tooltip .tip-pw:first-of-type { margin-top: 0; }
+.tooltip .tip-pw i { font-style: normal; font-weight: 700; margin-right: 3px; }
+.tooltip .tip-pw i.debuff { color: #e0a0ff; }
+.tooltip .tip-pw i.buff { color: #ffe08a; }
+.tooltip .tip-none { color: #6a6278; }
 
 .upgrade-compare { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; }
 .uc-side { display: flex; flex-direction: column; align-items: center; gap: 5px; }
