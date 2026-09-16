@@ -436,6 +436,33 @@ html, body {
 /* 날아오는 중인 카드는 다른 카드 위로 */
 .card.flying { z-index: 70 !important; }
 
+/* 카드 상세 설명 */
+.cd-card { display: flex; justify-content: center; width: 100%; }
+.cd-meta { font-size: 11.5px; color: #9a92a8; text-align: center; letter-spacing: .2px; }
+.cd-sec { width: 100%; }
+.cd-sec h4 {
+  margin: 0 0 5px; font-size: 11px; font-weight: 700; color: var(--gold);
+  letter-spacing: 1px; font-family: var(--font);
+}
+.cd-text { margin: 0 0 4px; font-size: 13px; line-height: 1.6; color: #ded6e8; }
+.cd-text.up { color: #9ae8a8; }
+.cd-text.up b { color: #7cff9a; }
+.cd-flags, .cd-kw { margin: 6px 0 0; padding-left: 15px; display: flex; flex-direction: column; gap: 5px; }
+.cd-flags li, .cd-kw li { font-size: 12.2px; line-height: 1.55; color: #cfc8d8; }
+.cd-flags li::marker, .cd-kw li::marker { color: #6a5f85; }
+.cd-kw b { font-weight: 700; }
+.cd-kw.glossary { max-height: 62vh; overflow-y: auto; padding-right: 4px; }
+.cd-kw .kw-debuff { color: #d99aff; } .cd-kw .kw-buff { color: #ffd24a; }
+.cd-kw .kw-block { color: #7ac8ff; } .cd-kw .kw-energy { color: #ffcf4a; }
+.cd-kw .kw-exhaust { color: #ff9a7a; } .cd-kw .kw-key { color: #9aff9a; }
+/* 길게 누르는 중 살짝 눌린 느낌 */
+.card.pressing .card-inner { filter: brightness(1.08); }
+/* 카드 설명의 용어에 점선 밑줄 — 길게 누르면 뜻을 볼 수 있다는 힌트 */
+.card-desc .kw-debuff, .card-desc .kw-buff, .card-desc .kw-block,
+.card-desc .kw-energy, .card-desc .kw-exhaust, .card-desc .kw-key {
+  border-bottom: 1px dotted currentColor;
+}
+
 /* ---------- 액션바 ---------- */
 .actionbar {
   flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 6px 12px 8px;

@@ -3,6 +3,7 @@
 // ============================================================
 import { GLYPH, svgIcon } from './icons.js';
 import { TYPE_KR, RARITY_KR, setCardPreview } from '../data/carddb.js';
+import { KEYWORDS as KEYWORD_LIST } from '../data/keywords.js';
 
 /** 카드별 문양 매핑 */
 const ART = {
@@ -105,13 +106,7 @@ const TYPE_THEME = {
 
 const RARITY_COLOR = { basic: '#9aa4b2', common: '#c8ccd4', uncommon: '#5ab9ff', rare: '#ffcf4a', special: '#b0b0b0', curse: '#a05ac0' };
 
-const KEYWORDS = [
-  ['취약', 'kw-debuff'], ['약화', 'kw-debuff'], ['허약', 'kw-debuff'], ['중독', 'kw-debuff'],
-  ['휘감김', 'kw-debuff'], ['혼란', 'kw-debuff'], ['소각', 'kw-exhaust'], ['소멸', 'kw-exhaust'],
-  ['내재', 'kw-key'], ['보존', 'kw-key'], ['방어도', 'kw-block'], ['에너지', 'kw-energy'],
-  ['힘', 'kw-buff'], ['민첩', 'kw-buff'], ['인공물', 'kw-buff'], ['가시', 'kw-buff'],
-  ['금속화', 'kw-buff'], ['재생', 'kw-buff'], ['무형', 'kw-buff'], ['활력', 'kw-buff'],
-];
+const KEYWORDS = KEYWORD_LIST.map((k) => [k[0], k[2]]).sort((a, b) => b[0].length - a[0].length);
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
@@ -199,6 +194,7 @@ export function renderCard(card, opts = {}) {
   el.style.setProperty('--c-glow', th.glow);
   el.style.setProperty('--c-rar', RARITY_COLOR[card.rarity] || '#ccc');
   el.dataset.uid = card.uid;
+  el.__card = card;   // 길게 눌러 상세 설명을 띄울 때 참조
 
   // 전투 중이면 실제 적용될 수치로 다시 계산해 달라진 부분만 강조한다
   let baseText = null;

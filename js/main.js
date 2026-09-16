@@ -8,6 +8,7 @@ import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, ACT_RANGES } from './e
 import { Battle } from './engine/battle.js';
 import { POWERS, powerName, powerDesc } from './engine/powers.js';
 import { CARD_DEFS, Card, mk, TYPE_KR, RARITY_KR } from './data/cards.js';
+import { KEYWORDS as KEYWORD_LIST, findKeywords } from './data/keywords.js';
 import { RELICS, RARITY_KR as RELIC_RARITY_KR } from './data/relics.js';
 import { POTIONS } from './data/potions.js';
 import { EVENTS, pickEvent } from './data/events.js';
@@ -255,10 +256,26 @@ function showHelp() {
 <b>취약</b> 받는 피해 +50% / <b>약화</b> 주는 피해 -25% / <b>허약</b> 방어도 -25%<br><br>
 <b>지도</b> — ⚔ 전투, ☠ 엘리트, ? 의문, 🔥 모닥불, 상점, 보물<br>
 17층·34층·50층에 보스가 있으며, 막을 넘어가면 체력이 전부 회복됩니다.<br><br>
+<b>카드를 길게 누르면</b> 그 카드의 상세 설명과 쓰인 용어의 뜻을 볼 수 있습니다.<br><br>
 진행 상황은 자동 저장됩니다.` }),
       el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn', text: '용어집', onclick: () => { SFX.tap(); closeModal(); showGlossary(); } }),
         el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })),
     );
+  });
+}
+
+/** 전체 용어집 */
+function showGlossary() {
+  openModal((box) => {
+    box.append(modalTitle('용어집'));
+    const ul = el('ul', { class: 'cd-kw glossary' });
+    KEYWORD_LIST.forEach(([name, desc, cls]) => {
+      ul.appendChild(el('li', {}, el('b', { class: cls, text: name }), ' — ' + desc));
+    });
+    box.append(ul, el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn', text: '게임 방법', onclick: () => { SFX.tap(); closeModal(); showHelp(); } }),
+      el('button', { class: 'btn ghost', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
   });
 }
 
@@ -832,6 +849,109 @@ function startOverlayLoop() {
 function stopOverlayLoop() { if (G.overlayRAF) cancelAnimationFrame(G.overlayRAF); G.overlayRAF = null; }
 
 // ---------------- 손패 ----------------
+// ============================================================
+//  카드 상세 설명 (길게 누르기)
+// ============================================================
+const CARD_FLAG_DESC = [
+  ['exhaust', '소각', '사용하면 이번 전투 동안 덱에서 빠집니다.'],
+  ['ethereal', '소멸', '턴이 끝날 때 손에 남아 있으면 소각됩니다.'],
+  ['retain', '보존', '턴이 끝나도 버려지지 않고 손에 남습니다.'],
+  ['innate', '내재', '전투 시작 시 항상 손에 들고 시작합니다.'],
+];
+
+/** 카드 한 장의 상세 설명 화면 */
+function showCardDetail(card) {
+  const d = card.def || {};
+  // 아직 강화하지 않은 카드는 강화 후 설명도 함께 보여 준다
+  let after = null;
+  if (!card.upgraded && card.canUpgrade()) {
+    try { after = mk(card.id, true); } catch (e) { after = null; }
+  }
+
+  openModal((box) => {
+    box.append(modalTitle(card.name));
+    box.appendChild(el('div', { class: 'cd-card' }, renderCardBig(card)));
+
+    // 유형 · 희귀도 · 비용 · 대상
+    const meta = [];
+    meta.push(TYPE_KR[card.type] || card.type);
+    if (RARITY_KR[card.rarity]) meta.push(RARITY_KR[card.rarity]);
+    const cost = card.baseCost;
+    meta.push(cost < 0 ? '비용 X' : `비용 ${cost}`);
+    if (card.target === 'enemy') meta.push('적 1체 지정');
+    else if (card.target === 'all') meta.push('적 전체');
+    box.appendChild(el('div', { class: 'cd-meta', text: meta.join(' · ') }));
+
+    // 카드 효과 (현재 / 강화 후)
+    const eff = el('div', { class: 'cd-sec' });
+    eff.appendChild(el('h4', { text: '효과' }));
+    eff.appendChild(el('p', { class: 'cd-text', text: card.text() }));
+    if (after) {
+      eff.appendChild(el('p', { class: 'cd-text up' }, el('b', { text: '강화하면 → ' }), after.text()));
+    }
+    // 카드 자체의 성질
+    const flags = CARD_FLAG_DESC.filter(([k]) => card[k] || d[k]);
+    if (flags.length) {
+      const ul = el('ul', { class: 'cd-flags' });
+      flags.forEach(([, name, desc]) => ul.appendChild(el('li', {}, el('b', { text: name }), ' — ' + desc)));
+      eff.appendChild(ul);
+    }
+    box.appendChild(eff);
+
+    // 이 카드에 등장하는 용어
+    const words = findKeywords(card.text() + ' ' + (after ? after.text() : ''));
+    if (words.length) {
+      const sec = el('div', { class: 'cd-sec' });
+      sec.appendChild(el('h4', { text: '용어' }));
+      const ul = el('ul', { class: 'cd-kw' });
+      words.forEach((k) => ul.appendChild(el('li', {},
+        el('b', { class: k.cls, text: k.name }), ' — ' + k.desc)));
+      sec.appendChild(ul);
+      box.appendChild(sec);
+    }
+
+    box.append(el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
+  });
+}
+
+// ---- 길게 누르기 : 카드가 보이는 모든 화면에서 동작 ----
+let lpTimer = null, lpNode = null, lpX = 0, lpY = 0, lpFiredAt = 0;
+function cancelLongPress() {
+  if (lpTimer) clearTimeout(lpTimer);
+  lpTimer = null;
+  if (lpNode) lpNode.classList.remove('pressing');
+  lpNode = null;
+}
+/** 방금 길게 누르기가 발동했으면 true (뒤따르는 탭 동작을 막는다) */
+function consumedLongPress() {
+  if (performance.now() - lpFiredAt < 700) { lpFiredAt = 0; return true; }
+  return false;
+}
+function initCardInspect() {
+  document.addEventListener('pointerdown', (e) => {
+    const node = e.target.closest && e.target.closest('.card');
+    if (!node || !node.__card || node.closest('.card-ghost')) return;
+    cancelLongPress();
+    lpNode = node; lpX = e.clientX; lpY = e.clientY;
+    lpTimer = setTimeout(() => {
+      const card = lpNode && lpNode.__card;
+      cancelLongPress();
+      if (!card) return;
+      lpFiredAt = performance.now();
+      SFX.cardPick();
+      showCardDetail(card);
+    }, 420);
+    node.classList.add('pressing');
+  }, true);
+  document.addEventListener('pointermove', (e) => {
+    if (!lpNode) return;
+    if (Math.abs(e.clientX - lpX) > 12 || Math.abs(e.clientY - lpY) > 12) cancelLongPress();
+  }, true);
+  ['pointerup', 'pointercancel', 'scroll'].forEach((ev) =>
+    document.addEventListener(ev, cancelLongPress, true));
+}
+
 /** 더미 버튼(뽑을/버린/소각)의 화면 중심 좌표 */
 function pileAnchor(sel) {
   const el = $(sel);
@@ -849,20 +969,24 @@ function flyCardIn(c, order) {
   const hr = handEl.getBoundingClientRect();
   const cw = c.offsetWidth || 88, ch = c.offsetHeight || 126;
   // .card 는 bottom:0 기준, transform-origin 은 50% 130%
-  const ox = hr.left + parseFloat(c.style.left || 0) + cw / 2;
+  const ox = hr.left + parseFloat(c.__finalLeft || c.style.left || 0) + cw / 2;
   const oy = hr.top + hr.height - ch + ch * 1.3;
   const dx = Math.round(src.x - ox), dy = Math.round(src.y - oy);
-  const finalT = c.style.transform;
   const delay = order * 0.055;
 
   c.classList.add('flying');
+  // 출발 상태를 쓴 직후 다른 이유로 다시 그려지면 이 상태가 덮여 애니메이션이 사라진다.
+  // flyPending 동안에는 renderHand 가 style 을 건드리지 않고 목표값만 갱신한다.
+  c.dataset.flyPending = '1';
   c.style.transition = 'none';
-  c.style.transform = `translate(${dx}px, ${dy}px) scale(0.16) ${finalT}`;
+  c.style.transform = `translate(${dx}px, ${dy}px) scale(0.16) ${c.__finalT}`;
   c.style.opacity = '0.2';
   // 두 프레임 뒤에 최종 상태로 전환해야 시작 상태가 확실히 그려진다
   requestAnimationFrame(() => requestAnimationFrame(() => {
+    delete c.dataset.flyPending;
     c.style.transition = `transform .42s cubic-bezier(.2,.86,.3,1) ${delay}s, opacity .18s linear ${delay}s`;
-    c.style.transform = finalT;
+    c.style.left = c.__finalLeft;
+    c.style.transform = c.__finalT;
     c.style.opacity = '1';
   }));
   setTimeout(() => {
@@ -937,17 +1061,21 @@ function renderHand() {
     const x = w / 2 + (t - 0.5) * spread - cw / 2;
     const ang = n === 1 ? 0 : (t - 0.5) * Math.min(13, n * 2.2);
     const y = -Math.cos((t - 0.5) * Math.PI) * Math.min(10, n * 1.6) + 8;
-    c.style.left = x + 'px';
-    c.style.transform = `translateY(${y}px) rotate(${ang}deg)`;
+    const isSel = !!(G.selectedCard && G.selectedCard.uid === card.uid);
+    const leftPx = (isSel ? (w / 2 - cw / 2) : x) + 'px';
+    const tf = `translateY(${y}px) rotate(${ang}deg)`;
+    // 비행 애니메이션이 참조할 최종 목표 (렌더가 여러 번 돌아도 최신값을 따라간다)
+    c.__finalLeft = leftPx;
+    c.__finalT = tf;
     c.style.zIndex = 10 + i;
     // 선택 취소 시 되돌아갈 원래 자리
     c.dataset.homeLeft = x + 'px';
-    c.dataset.homeTransform = c.style.transform;
+    c.dataset.homeTransform = tf;
     c.classList.toggle('unplayable-now', !B.canPlay(card));
-    if (G.selectedCard && G.selectedCard.uid === card.uid) {
-      c.classList.add('selected');
-      // 선택된 카드는 손패 가운데로 띄워 크게 보여준다
-      c.style.left = (w / 2 - cw / 2) + 'px';
+    c.classList.toggle('selected', isSel);
+    if (c.dataset.flyPending !== '1') {
+      c.style.left = leftPx;
+      c.style.transform = tf;
     }
     if (!reused) attachCardEvents(c, card);
     handEl.appendChild(c);
@@ -1029,6 +1157,7 @@ function attachCardEvents(elm, card) {
 
 function onCardTap(card) {
   const B = G.battle;
+  if (consumedLongPress()) return;
   if (!B.playerTurn || B.playing) return;
   SFX.cardPick();
   if (G.selectedCard && G.selectedCard.uid === card.uid) { tryPlay(card); return; }
@@ -1853,4 +1982,5 @@ function bind() {
 
 initTitle();
 bind();
+initCardInspect();
 console.log('%ccnation STS 준비 완료', 'color:#e8c34a');

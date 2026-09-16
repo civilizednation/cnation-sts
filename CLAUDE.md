@@ -64,6 +64,7 @@ js/data/
   relics.js                유물 117 (캐릭터 전용 포함)
   potions.js / events.js / neow.js (시작 보너스)
   changelog.js             변경 이력 (타이틀 → Revision History)
+  keywords.js              키워드 사전 (카드 상세 설명 · 용어집 · 카드 텍스트 색 입히기)
 js/engine/
   powers.js                힘·상태이상 정의
   battle.js                전투 엔진 (턴/피해/AI/구체/자세/통찰)
