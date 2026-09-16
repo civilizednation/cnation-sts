@@ -4,7 +4,7 @@
 
 // ---- 설정 (효과음 · 배경음 공용, localStorage 에 보관) ----
 const PREF_KEY = 'cnation_sts_audio_v1';
-const DEFAULTS = { sfx: true, sfxVol: 0.35, bgm: true, bgmVol: 0.30 };
+const DEFAULTS = { sfx: true, sfxVol: 0.50, bgm: true, bgmVol: 0.50 };
 let pref = { ...DEFAULTS };
 try {
   const raw = localStorage.getItem(PREF_KEY);
@@ -39,10 +39,56 @@ export function unlockAudio() {
   const c = ac();
   if (c.state === 'suspended') c.resume();
   unlockListeners.forEach((f) => { try { f(); } catch (e) { /* noop */ } });
+  notifyWake();
 }
 const unlockListeners = [];
 /** 처음 잠금이 풀렸을 때 배경음을 시작하기 위한 구독 창구 */
 export function onAudioUnlock(fn) { unlockListeners.push(fn); }
+
+// ---- 앱 전환 복귀 처리 ----------------------------------------------------
+// iOS/Android 는 다른 앱으로 나가면 AudioContext 를 suspend 시킨다.
+// 돌아왔을 때 resume 하지 않으면 효과음과 배경음이 전부 무음이 된다
+// (둘 다 같은 컨텍스트를 쓰기 때문). 설정을 껐다 켜도 살아나지 않는다.
+const wakeListeners = [];
+/** 컨텍스트가 다시 살아났을 때 알림을 받는 창구 */
+export function onAudioWake(fn) { wakeListeners.push(fn); }
+function notifyWake() { wakeListeners.forEach((f) => { try { f(); } catch (e) { /* noop */ } }); }
+
+let gestureArmed = false;
+/** 다음 화면 터치에서 다시 깨우도록 예약 (resume 이 제스처를 요구하는 경우) */
+function armGesture() {
+  if (gestureArmed) return;
+  gestureArmed = true;
+  const h = () => {
+    document.removeEventListener('pointerdown', h, true);
+    gestureArmed = false;
+    wakeAudio();
+  };
+  document.addEventListener('pointerdown', h, true);
+}
+
+/** 잠든 AudioContext 를 깨운다. 실패하면 다음 터치에서 다시 시도한다. */
+export function wakeAudio() {
+  if (!ctx) return;
+  if (ctx.state === 'running') { notifyWake(); return; }
+  let p;
+  try { p = ctx.resume(); } catch (e) { armGesture(); return; }
+  if (p && p.then) {
+    p.then(() => { if (ctx.state === 'running') notifyWake(); else armGesture(); })
+     .catch(() => armGesture());
+  } else if (ctx.state === 'running') notifyWake();
+  else armGesture();
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeAudio(); });
+  addEventListener('pageshow', () => wakeAudio());
+  addEventListener('focus', () => wakeAudio());
+}
+
+/** 진단용 */
+export function audioState() { return ctx ? ctx.state : 'none'; }
+if (typeof window !== 'undefined') window.__ctxSuspend = () => (ctx ? ctx.suspend() : Promise.resolve());   // 자동 테스트용
 
 export function setSfxEnabled(v) { pref.sfx = !!v; savePref(); notifyPref(); }
 export function isSfxEnabled() { return pref.sfx; }

@@ -6,7 +6,7 @@
 //  (decodeAudioData 로 전곡을 메모리에 올리면 15곡이면 수백 MB 가 되어
 //   모바일에서 위험하다. <audio> 는 스트리밍이라 메모리를 거의 안 쓴다.)
 // ============================================================
-import { getCtx, onAudioUnlock, onAudioPrefChange, isBgmEnabled, getBgmVolume } from './audio.js';
+import { getCtx, onAudioUnlock, onAudioWake, onAudioPrefChange, isBgmEnabled, getBgmVolume, audioState, wakeAudio } from './audio.js';
 
 const DIR = 'audio/';
 
@@ -200,16 +200,24 @@ export const BGM = {
     });
     onAudioPrefChange(() => {
       if (!ready || cur < 0) return;
+      if (audioState() === 'suspended') wakeAudio();
       fadeTo(deck[cur], vol(), 0.2);
       const el = deck[cur].el;
       if (!isBgmEnabled()) setTimeout(() => { if (!isBgmEnabled()) el.pause(); }, 260);
       else if (el.src && el.paused && !hidden) el.play().catch(() => {});
     });
+    // 앱 전환 : 나갈 때는 멈추고, 돌아올 때는 컨텍스트가 깨어난 뒤(onAudioWake) 다시 튼다
     document.addEventListener('visibilitychange', () => {
       hidden = document.hidden;
-      if (!ready || cur < 0) return;
-      if (hidden) deck[cur].el.pause();
-      else if (isBgmEnabled() && deck[cur].el.src) deck[cur].el.play().catch(() => {});
+      if (hidden && ready && cur >= 0) deck[cur].el.pause();
+    });
+    onAudioWake(() => {
+      hidden = document.hidden;   // audio.js 쪽 리스너가 먼저 도는 경우가 있어 직접 읽는다
+      if (!ready || cur < 0 || hidden) return;
+      const el = deck[cur].el;
+      // suspend 중에 예약해 둔 게인 램프가 날아갔을 수 있으므로 다시 맞춘다
+      fadeTo(deck[cur], vol(), 0.2);
+      if (isBgmEnabled() && el.src && el.paused) el.play().catch(() => {});
     });
   },
 
@@ -263,13 +271,13 @@ export const BGM = {
   /** 자동 테스트용 */
   current() { return curKey; },
   state() {
-    if (!ready || cur < 0) return { key: curKey, playing: false, src: null, pending, warmed: [...warmed], reserved: { ...reserved } };
+    if (!ready || cur < 0) return { key: curKey, playing: false, src: null, pending, warmed: [...warmed], reserved: { ...reserved }, ctx: audioState() };
     const el = deck[cur].el;
     return { key: curKey, playing: !el.paused, src: el.getAttribute('src'), loop: el.loop,
       gain: +deck[cur].gain.gain.value.toFixed(3), pending,
       time: +el.currentTime.toFixed(2), dur: el.duration || 0,
       buffered: el.buffered.length ? +el.buffered.end(el.buffered.length - 1).toFixed(1) : 0,
-      warmed: [...warmed], reserved: { ...reserved } };
+      warmed: [...warmed], reserved: { ...reserved }, ctx: audioState() };
   },
 };
 
