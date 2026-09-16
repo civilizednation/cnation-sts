@@ -164,6 +164,7 @@ function modalText(text) { return el('p', { class: 'modal-text', text }); }
 function initTitle() {
   startTitleScene();
   BGM.play('title');
+  BGM.prefetch('map');          // 새 게임을 누르면 바로 쓸 곡
   // 모바일은 첫 사용자 동작 전에는 소리를 못 낸다 — 타이틀 아무 곳이나 누르면 잠금을 푼다
   const kick = () => { unlockAudio(); document.removeEventListener('pointerdown', kick, true); };
   document.addEventListener('pointerdown', kick, true);
@@ -787,6 +788,7 @@ document.addEventListener('pointerdown', (e) => {
 function goMap() {
   G.battle = null;
   BGM.play('map');
+  BGM.prefetchBattle('normal');   // 다음 전투 곡을 미리 정해 두고 받아 둔다
   stopOverlayLoop();
   showScreen('scr-map');
   renderTopbar('#battle-top');

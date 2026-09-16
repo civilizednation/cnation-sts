@@ -44,12 +44,18 @@ const FADE = {
 };
 
 let ready = false;
-const deck = [];        // [{ el, gain, gen }] 두 장
+// 슬롯 3장 : 재생 중 / 페이드아웃 중 / 미리 받는 중 이 동시에 있을 수 있다.
+// 미리 받아 둔 슬롯을 그대로 재생에 쓰므로 프리페치가 헛되지 않는다.
+const SLOTS = 3;
+const deck = [];        // [{ el, gain, gen, file }]
 let cur = -1;           // 지금 울리는 쪽 인덱스
 let curKey = null;      // 지금 재생 중인 트랙 키 (같은 키면 다시 틀지 않는다)
 let pending = null;     // 잠금이 풀리면 틀 것 { file, loop, fade }
 let timer = null;
 const lastOf = {};      // 풀별 직전 곡 (연속 반복 방지)
+const reserved = {};    // 미리 정해 둔 다음 전투 곡 (프리페치한 것과 같은 곡을 쓴다)
+const warmed = new Set();   // 이미 미리 받아 둔 파일
+let warmIdx = -1;       // 지금 미리 받고 있는 슬롯
 let hidden = false;
 
 function vol() { return isBgmEnabled() ? getBgmVolume() : 0; }
@@ -61,14 +67,14 @@ function setup() {
   try { ctx = getCtx(); } catch (e) { return false; }
   if (!ctx) return false;
   try {
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < SLOTS; i++) {
       const el = new Audio();
       el.preload = 'none';
       const gain = ctx.createGain();
       gain.gain.value = 0;
       ctx.createMediaElementSource(el).connect(gain);
       gain.connect(ctx.destination);
-      deck.push({ el, gain, gen: 0 });
+      deck.push({ el, gain, gen: 0, file: null });
     }
   } catch (e) { deck.length = 0; return false; }
   ready = true;
@@ -94,21 +100,42 @@ function stopSlot(slot, sec) {
     slot.el.pause();
     slot.el.removeAttribute('src');
     slot.el.load();
+    slot.file = null;
   }, Math.max(0, sec * 1000) + 80);
 }
 
+/**
+ * 그 파일을 쓸 슬롯을 고른다.
+ * 이미 그 파일을 물고 있는 슬롯(= 미리 받아 둔 슬롯)이 있으면 그대로 쓴다.
+ * 없으면 재생 중이 아닌 슬롯 중 프리페치 중이 아닌 것부터 고른다.
+ */
+function slotFor(file) {
+  for (let i = 0; i < SLOTS; i++) if (i !== cur && deck[i].file === file) return i;
+  for (let i = 0; i < SLOTS; i++) if (i !== cur && i !== warmIdx) return i;
+  for (let i = 0; i < SLOTS; i++) if (i !== cur) return i;
+  return (cur + 1) % SLOTS;
+}
+
 function startFile(file, loop, fadeIn) {
-  const next = (cur + 1) % 2;
-  const slot = deck[next];
+  const idx = slotFor(file);
+  const slot = deck[idx];
   slot.gen++;
-  slot.el.pause();
-  slot.el.src = DIR + file;
+  if (slot.file === file && slot.el.src) {
+    // 미리 받아 둔 슬롯 — 새로 요청하지 않고 버퍼를 그대로 쓴다
+    try { slot.el.currentTime = 0; } catch (e) { /* 아직 메타데이터 전 */ }
+  } else {
+    slot.el.pause();
+    slot.el.src = DIR + file;
+    slot.file = file;
+  }
+  slot.el.preload = 'auto';
   slot.el.loop = !!loop;
   slot.gain.gain.value = 0;
   const p = slot.el.play();
   if (p && p.catch) p.catch(() => { /* 자동재생 차단 — 다음 제스처에서 다시 시도한다 */ });
   fadeTo(slot, vol(), fadeIn);
-  cur = next;
+  if (idx === warmIdx) warmIdx = -1;
+  cur = idx;
 }
 
 /** 실제 전환 */
@@ -137,6 +164,30 @@ function pick(pool, poolKey) {
   const f = cand[Math.floor(Math.random() * cand.length)] || pool[0];
   lastOf[poolKey] = f;
   return f;
+}
+
+/**
+ * 다음에 쓸 곡을 미리 받아 둔다.
+ * 재생하지 않는 <audio> 에 물려 두면 브라우저가 알아서 버퍼를 채우고,
+ * 실제로 틀 때는 HTTP 캐시에서 바로 나와 버퍼링 없이 시작한다.
+ * (audio/ 는 immutable 캐시 헤더라 재요청이 캐시에 적중한다)
+ */
+function warm(file) {
+  if (!file || !isBgmEnabled() || hidden) return;
+  if (!setup()) return;
+  for (let i = 0; i < SLOTS; i++) if (deck[i].file === file) return;   // 이미 물고 있다
+  const idx = slotFor(file);
+  if (idx === cur) return;
+  const slot = deck[idx];
+  slot.gen++;
+  slot.el.pause();
+  slot.gain.gain.value = 0;
+  slot.el.preload = 'auto';
+  slot.el.src = DIR + file;
+  slot.file = file;
+  slot.el.load();
+  warmIdx = idx;
+  warmed.add(file);
 }
 
 export const BGM = {
@@ -178,10 +229,28 @@ export const BGM = {
   playBattle(kind, act) {
     if (kind === 'boss') { BGM.play('boss' + Math.min(3, Math.max(1, act || 1)), 'boss'); return; }
     const poolKey = kind === 'elite' ? 'elite' : 'normal';
-    const file = pick(POOLS[poolKey], poolKey);
+    // 지도에서 미리 받아 둔 곡이 있으면 그걸 쓴다 (없으면 지금 고른다)
+    const file = reserved[poolKey] || pick(POOLS[poolKey], poolKey);
+    reserved[poolKey] = null;
     if (curKey === file) return;
     curKey = file;
     request(file, true, 'battle');
+  },
+
+  /** 곧 쓸 트랙을 미리 받아 둔다 */
+  prefetch(key) {
+    const t = TRACKS[key];
+    if (t) warm(t.file);
+  },
+
+  /**
+   * 다음 전투 곡을 지금 정해 두고 미리 받는다.
+   * 정해 둔 곡은 실제 전투가 시작될 때 그대로 쓰인다.
+   */
+  prefetchBattle(kind = 'normal') {
+    const poolKey = kind === 'elite' ? 'elite' : 'normal';
+    if (!reserved[poolKey]) reserved[poolKey] = pick(POOLS[poolKey], poolKey);
+    warm(reserved[poolKey]);
   },
 
   /** 완전히 멈춘다 */
@@ -194,12 +263,13 @@ export const BGM = {
   /** 자동 테스트용 */
   current() { return curKey; },
   state() {
-    if (!ready || cur < 0) return { key: curKey, playing: false, src: null, pending };
+    if (!ready || cur < 0) return { key: curKey, playing: false, src: null, pending, warmed: [...warmed], reserved: { ...reserved } };
     const el = deck[cur].el;
     return { key: curKey, playing: !el.paused, src: el.getAttribute('src'), loop: el.loop,
       gain: +deck[cur].gain.gain.value.toFixed(3), pending,
       time: +el.currentTime.toFixed(2), dur: el.duration || 0,
-      buffered: el.buffered.length ? +el.buffered.end(el.buffered.length - 1).toFixed(1) : 0 };
+      buffered: el.buffered.length ? +el.buffered.end(el.buffered.length - 1).toFixed(1) : 0,
+      warmed: [...warmed], reserved: { ...reserved } };
   },
 };
 
