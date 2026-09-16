@@ -1367,7 +1367,9 @@ function renderHand() {
     c.__finalLeft = leftPx;
     c.__finalT = tf;
     c.style.setProperty('--ft', tf);
-    c.style.zIndex = 10 + i;
+    // 고른 카드는 손패 어느 위치에 있든 항상 맨 위에 보이게 한다
+    // (인라인 z-index 가 CSS 의 .card.selected 규칙을 덮어써서 뒤로 가려지던 문제)
+    c.style.zIndex = isSel ? 80 : 10 + i;
     // 선택 취소 시 되돌아갈 원래 자리
     c.dataset.homeLeft = x + 'px';
     c.dataset.homeTransform = tf;
@@ -1439,7 +1441,7 @@ function attachCardEvents(elm, card) {
     if (Math.abs(dy) > 14 || Math.abs(dx) > 14) moved = true;
     if (dy < -20) {
       elm.style.transform = `translate(${dx}px, ${dy}px) scale(1.1)`;
-      elm.style.zIndex = 60;
+      elm.style.zIndex = 80;
     }
   });
   elm.addEventListener('pointerup', (e) => {
