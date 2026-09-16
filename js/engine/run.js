@@ -97,7 +97,7 @@ export class Run {
   healPlayer(n) { this.player.hp = Math.min(this.player.maxHp, this.player.hp + n); }
   gainMaxHp(n) { this.player.maxHp += n; this.player.hp += n; }
   loseMaxHp(n) { this.player.maxHp = Math.max(1, this.player.maxHp - n); this.player.hp = Math.min(this.player.hp, this.player.maxHp); }
-  gainGold(n) { if (this.hasRelic('ectoplasm')) return; this.gold += n; }
+  gainGold(n) { if (this.hasRelic('ectoplasm')) return; this.gold += this.cheat ? n * 2 : n; }   // 숨겨진 시작 보너스 : 얻는 골드 2배
   spendGold(n) { this.gold = Math.max(0, this.gold - n); this.relicHook('onSpendGold', this); }
 
   // ---------------- 덱 조작 ----------------

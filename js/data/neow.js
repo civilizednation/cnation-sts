@@ -150,6 +150,7 @@ export const NEOW_SECRET = {
     run.cheat = true;
     run.gainMaxHp(run.player.maxHp);          // 최대 체력 2배 + 그만큼 회복
     run.player.hp = run.player.maxHp;
+    run.gold *= 2;                            // 지금 가진 골드도 2배 (이후 얻는 골드는 gainGold 에서 2배)
     const got = [];
     const common = run.pickRelic('common');
     if (common) { await ctx.gainRelic(common); got.push(ctx.relicName(common)); }
@@ -158,7 +159,8 @@ export const NEOW_SECRET = {
     const lines = [
       '첨탑이 잠시 숨을 멈춘다.',
       `최대 체력이 ${run.player.maxHp}이 되었다.`,
-      '공격 카드의 피해, 방어 카드의 방어도, 물약의 효과가 모두 2배가 된다.',
+      '공격 카드의 피해, 방어 카드의 방어도, 물약의 효과, 얻는 골드가 모두 2배가 된다.',
+      `골드가 ${run.gold}이 되었다.`,
     ];
     if (got.length) lines.push(`${got.join(', ')}을(를) 얻었다.`);
     return lines.join('\n');
