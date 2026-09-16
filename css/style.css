@@ -435,6 +435,25 @@ html, body {
 }
 /* 날아오는 중인 카드는 다른 카드 위로 */
 .card.flying { z-index: 70 !important; }
+/*
+ * 카드를 뽑는 연출 — "뽑을" 더미에서 출발해 살짝 솟았다 손패에 내려앉는다.
+ *  --fx/--fy : 더미까지의 거리, --ft : 손패에서의 최종 자세
+ *  60% 지점을 목표보다 위(-48px)로 잡아 직선이 아닌 호를 그리게 한다.
+ */
+@keyframes cardDrawIn {
+  0% {
+    transform: translate(var(--fx, 0px), var(--fy, 0px)) rotate(-36deg) scale(.10)
+               var(--ft, translateY(0px));
+    opacity: .6;
+  }
+  12% { opacity: 1; }
+  60% {
+    transform: translate(calc(var(--fx, 0px) * .24), calc(var(--fy, 0px) * .24 - 48px))
+               rotate(-9deg) scale(.66) var(--ft, translateY(0px));
+    opacity: 1;
+  }
+  100% { transform: var(--ft, translateY(0px)); opacity: 1; }
+}
 
 /* 게임 방법 — 항목이 많아 왼쪽 정렬 목록으로 */
 .help-body {

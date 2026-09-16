@@ -988,6 +988,10 @@ function initCardInspect() {
     document.addEventListener(ev, cancelLongPress, true));
 }
 
+// 카드를 뽑는 연출 : 한 장이 날아오는 시간 / 장 사이 간격
+const DRAW_DUR = 0.62;
+const DRAW_STAGGER = 0.1;
+
 /** 더미 버튼(뽑을/버린/소각)의 화면 중심 좌표 */
 function pileAnchor(sel) {
   const el = $(sel);
@@ -997,7 +1001,11 @@ function pileAnchor(sel) {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
 
-/** 뽑은 카드가 "뽑을" 더미에서 작게 날아와 제자리에서 커진다 */
+/**
+ * 뽑은 카드가 "뽑을" 더미에서 날아와 손패 자리에 놓인다.
+ * 직선 이동 + 급한 감속은 "제자리에서 펼쳐지는" 느낌이 나므로,
+ * 살짝 위로 솟았다 내려앉는 호(弧)를 그리며 회전이 풀리도록 키프레임으로 만든다.
+ */
 function flyCardIn(c, order) {
   const src = pileAnchor('#btn-draw');
   const handEl = $('#hand');
@@ -1008,28 +1016,23 @@ function flyCardIn(c, order) {
   const ox = hr.left + parseFloat(c.__finalLeft || c.style.left || 0) + cw / 2;
   const oy = hr.top + hr.height - ch + ch * 1.3;
   const dx = Math.round(src.x - ox), dy = Math.round(src.y - oy);
-  const delay = order * 0.055;
+  const delay = order * DRAW_STAGGER;
 
   c.classList.add('flying');
-  // 출발 상태를 쓴 직후 다른 이유로 다시 그려지면 이 상태가 덮여 애니메이션이 사라진다.
-  // flyPending 동안에는 renderHand 가 style 을 건드리지 않고 목표값만 갱신한다.
   c.dataset.flyPending = '1';
-  c.style.transition = 'none';
-  c.style.transform = `translate(${dx}px, ${dy}px) scale(0.16) ${c.__finalT}`;
-  c.style.opacity = '0.2';
-  // 두 프레임 뒤에 최종 상태로 전환해야 시작 상태가 확실히 그려진다
-  requestAnimationFrame(() => requestAnimationFrame(() => {
+  c.style.setProperty('--fx', dx + 'px');
+  c.style.setProperty('--fy', dy + 'px');
+  c.style.left = c.__finalLeft;
+  c.style.transform = c.__finalT;
+  // 애니메이션이 인라인 transform 보다 우선하므로 중간에 다시 그려져도 끊기지 않는다
+  c.style.animation = `cardDrawIn ${DRAW_DUR}s cubic-bezier(.36,.06,.24,1) ${delay}s both`;
+  setTimeout(() => {
     delete c.dataset.flyPending;
-    c.style.transition = `transform .42s cubic-bezier(.2,.86,.3,1) ${delay}s, opacity .18s linear ${delay}s`;
+    c.classList.remove('flying');
+    c.style.animation = '';
     c.style.left = c.__finalLeft;
     c.style.transform = c.__finalT;
-    c.style.opacity = '1';
-  }));
-  setTimeout(() => {
-    c.classList.remove('flying');
-    c.style.transition = '';
-    c.style.opacity = '';
-  }, 480 + delay * 1000);
+  }, DRAW_DUR * 1000 + delay * 1000 + 40);
   return true;
 }
 
@@ -1103,16 +1106,15 @@ function renderHand() {
     // 비행 애니메이션이 참조할 최종 목표 (렌더가 여러 번 돌아도 최신값을 따라간다)
     c.__finalLeft = leftPx;
     c.__finalT = tf;
+    c.style.setProperty('--ft', tf);
     c.style.zIndex = 10 + i;
     // 선택 취소 시 되돌아갈 원래 자리
     c.dataset.homeLeft = x + 'px';
     c.dataset.homeTransform = tf;
     c.classList.toggle('unplayable-now', !B.canPlay(card));
     c.classList.toggle('selected', isSel);
-    if (c.dataset.flyPending !== '1') {
-      c.style.left = leftPx;
-      c.style.transform = tf;
-    }
+    c.style.left = leftPx;
+    c.style.transform = tf;
     if (!reused) attachCardEvents(c, card);
     handEl.appendChild(c);
     if (!reused && !before.has(card.uid)) fresh.push(c);
