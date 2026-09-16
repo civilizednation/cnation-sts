@@ -416,6 +416,12 @@ html, body {
 .card-type { font-size: 7.5px; color: #a099b0; letter-spacing: .5px; }
 .card-rar { width: 7px; height: 7px; transform: rotate(45deg); background: var(--c-rar); border: .5px solid rgba(0,0,0,.5); }
 .card.small { position: relative; width: 74px; height: 106px; }
+/* 작은 카드는 설명이 넘쳐 이름 위로 삐져나오므로 줄 수를 제한해 잘라 낸다 */
+.card.small .card-body { align-items: flex-start; padding-top: 11px; }   /* 이름표 아래에서 시작하도록 */
+.card.small .card-desc {
+  font-size: 7.6px; line-height: 1.28;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
+}
 .card.big { position: relative; width: 150px; height: 214px; }
 .card.selected .card-desc { font-size: 9.2px; }
 .card.big .card-desc { font-size: 14.4px; }
@@ -470,6 +476,62 @@ html, body {
 .help-sec li { font-size: 12.4px; line-height: 1.58; color: #cfc8d8; }
 .help-sec li::marker { color: #6a5f85; }
 .help-sec li b { color: #e6dcff; font-weight: 700; }
+
+/* ---------- 도감 ---------- */
+#scr-codex { background: linear-gradient(#120d18, #08070c 70%); }
+.codex-tabs, .codex-sub {
+  flex: 0 0 auto; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+  padding: 7px 10px; background: rgba(14,11,20,.9); border-bottom: 1px solid #241d33;
+}
+.codex-tabs::-webkit-scrollbar, .codex-sub::-webkit-scrollbar { display: none; }
+.cx-tab, .cx-sub {
+  flex: 0 0 auto; padding: 6px 13px; border-radius: 999px; white-space: nowrap;
+  background: rgba(30,24,42,.9); border: 1px solid #453a5a; color: var(--text-dim);
+  font-family: inherit; font-size: 12.5px; font-weight: 700;
+}
+.cx-tab.on { background: linear-gradient(#8a6a20, #5a4210); border-color: var(--gold); color: #fff4d0; }
+.cx-sub { padding: 4px 11px; font-size: 11.5px; font-weight: 400; }
+.cx-sub.on { background: rgba(80,66,110,.95); border-color: #9a86d8; color: #ece4ff; }
+.cx-count { margin: 0; font-size: 11px; color: #7a7288; text-align: center; }
+
+.cx-row {
+  display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px;
+  background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px;
+}
+.cx-info { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.cx-info b { color: var(--gold); font-size: 13px; }
+.cx-info small { flex: 1 1 100%; font-size: 12px; line-height: 1.5; color: #cfc8d8; }
+.cx-tag {
+  font-size: 9.5px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(0,0,0,.35); border: 1px solid #4a3f66; color: #b8aed0;
+}
+.cx-tag.r-starter { color: #b8b0c8; } .cx-tag.r-common { color: #d8d0e8; }
+.cx-tag.r-uncommon { color: #7fd0ff; border-color: #3a6a90; }
+.cx-tag.r-rare { color: #ffd24a; border-color: #7a6020; }
+.cx-tag.r-boss { color: #d89aff; border-color: #6a3f90; }
+.cx-tag.who { color: #8affc0; border-color: #2f6b4a; }
+
+.cx-char {
+  display: flex; gap: 11px; padding: 11px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--acc, var(--panel-edge));
+  box-shadow: inset 0 0 26px rgba(0,0,0,.4);
+}
+.cx-portrait {
+  flex: 0 0 auto; width: 78px; height: 78px; border-radius: 10px;
+  background: radial-gradient(circle at 50% 35%, rgba(255,255,255,.07), transparent 70%);
+  display: grid; place-items: center;
+}
+.cx-portrait img { width: 100%; height: 100%; object-fit: contain; }
+.cx-char-info { flex: 1 1 auto; min-width: 0; }
+.cx-char-info b { color: var(--acc); font-size: 15px; }
+.cx-char-info em { font-style: normal; font-size: 11px; color: #9a92a8; margin-left: 5px; }
+.cx-char-info p { margin: 5px 0 0; font-size: 12.2px; line-height: 1.55; color: #cfc8d8; }
+.cx-char-info p.cx-mech { color: #a8a0c0; }
+.cx-char-info ul { margin: 7px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.cx-char-info li { font-size: 11.5px; line-height: 1.5; color: #cfc8d8; }
+.cx-char-info li span {
+  display: inline-block; min-width: 56px; color: var(--gold); font-weight: 700; font-size: 10.5px;
+}
 
 /* 카드 상세 설명 */
 .cd-card { display: flex; justify-content: center; width: 100%; }

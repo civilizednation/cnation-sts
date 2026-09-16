@@ -41,7 +41,7 @@ window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // 자동 테스트용
 window.__fight = (ids) => startBattle({ monsters: ids, kind: 'boss' });     // 자동 테스트용
 
-const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-modal'];
+const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex', 'scr-modal'];
 function showScreen(id) {
   SCREENS.forEach((s) => { const e = $('#' + s); if (e) e.hidden = s !== id; });
   if (id === 'scr-title') requestAnimationFrame(() => { try { T3.resizeTitle(); } catch (e) { /* noop */ } });
@@ -122,6 +122,11 @@ function initTitle() {
   if (vb) vb.textContent = `Version ${VERSION}`;
   $('#link-history').addEventListener('click', (e) => { e.preventDefault(); SFX.tap(); showHistory(); });
   $('#btn-history-home').addEventListener('click', () => { SFX.tap(); showScreen('scr-title'); });
+  $('#btn-codex-close').addEventListener('click', () => {
+    SFX.tap();
+    // 게임 중이면 원래 화면으로, 아니면 타이틀로
+    showScreen(G.battle ? 'scr-battle' : G.run ? 'scr-map' : 'scr-title');
+  });
   $('#btn-new').addEventListener('click', () => { unlockAudio(); SFX.tap(); newGame(); });
   $('#btn-continue').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
@@ -291,23 +296,170 @@ function showHelp() {
       body.appendChild(sec);
     });
     box.append(body, el('div', { class: 'modal-actions' },
-      el('button', { class: 'btn', text: '용어집', onclick: () => { SFX.tap(); closeModal(); showGlossary(); } }),
+      el('button', { class: 'btn', text: '도감', onclick: () => { SFX.tap(); closeModal(); showCodex('card', 'red'); } }),
       el('button', { class: 'btn ghost', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
   });
 }
 
-/** 전체 용어집 */
-function showGlossary() {
-  openModal((box) => {
-    box.append(modalTitle('용어집'));
-    const ul = el('ul', { class: 'cd-kw glossary' });
-    KEYWORD_LIST.forEach(([name, desc, cls]) => {
-      ul.appendChild(el('li', {}, el('b', { class: cls, text: name }), ' — ' + desc));
-    });
-    box.append(ul, el('div', { class: 'modal-actions' },
-      el('button', { class: 'btn', text: '게임 방법', onclick: () => { SFX.tap(); closeModal(); showHelp(); } }),
-      el('button', { class: 'btn ghost', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
+// ============================================================
+//  도감 — 카드 / 유물 / 물약 / 캐릭터 / 용어
+// ============================================================
+const CODEX_TABS = [
+  ['card', '카드'], ['relic', '유물'], ['potion', '물약'], ['char', '캐릭터'], ['word', '용어'],
+];
+const CARD_GROUPS = [
+  ['red', '아이언클래드'], ['green', '사일런트'], ['blue', '디펙트'],
+  ['purple', '와쳐'], ['colorless', '무색'], ['curse', '상태·저주'],
+];
+const RELIC_GROUPS = [
+  ['all', '전체'], ['starter', '시작'], ['common', '일반'],
+  ['uncommon', '고급'], ['rare', '희귀'], ['boss', '보스'],
+];
+let codexTab = 'card';
+let codexSub = 'red';
+
+/** 한 번 만든 카드 인스턴스는 재사용한다 (도감은 강화 전 기준) */
+const codexCardCache = new Map();
+function codexCard(id) {
+  if (!codexCardCache.has(id)) codexCardCache.set(id, mk(id));
+  return codexCardCache.get(id);
+}
+
+function showCodex(tab, sub) {
+  if (tab) codexTab = tab;
+  if (sub !== undefined) codexSub = sub;
+
+  // 탭 줄
+  const tabs = $('#codex-tabs');
+  tabs.innerHTML = '';
+  CODEX_TABS.forEach(([id, label]) => {
+    tabs.appendChild(el('button', {
+      class: 'cx-tab' + (codexTab === id ? ' on' : ''), text: label,
+      onclick: () => { SFX.tap(); showCodex(id, id === 'card' ? 'red' : id === 'relic' ? 'all' : ''); },
+    }));
   });
+
+  // 하위 분류 줄
+  const subBar = $('#codex-sub');
+  subBar.innerHTML = '';
+  const groups = codexTab === 'card' ? CARD_GROUPS : codexTab === 'relic' ? RELIC_GROUPS : null;
+  subBar.hidden = !groups;
+  if (groups) {
+    if (!groups.some(([g]) => g === codexSub)) codexSub = groups[0][0];
+    groups.forEach(([id, label]) => {
+      subBar.appendChild(el('button', {
+        class: 'cx-sub' + (codexSub === id ? ' on' : ''), text: label,
+        onclick: () => { SFX.tap(); showCodex(codexTab, id); },
+      }));
+    });
+  }
+
+  const body = $('#codex-body');
+  body.innerHTML = '';
+  if (codexTab === 'card') codexCards(body);
+  else if (codexTab === 'relic') codexRelics(body);
+  else if (codexTab === 'potion') codexPotions(body);
+  else if (codexTab === 'char') codexChars(body);
+  else codexWords(body);
+  body.scrollTop = 0;
+  showScreen('scr-codex');
+}
+
+function codexCards(body) {
+  const ids = Object.keys(CARD_DEFS).filter((id) => {
+    const d = CARD_DEFS[id];
+    if (codexSub === 'curse') return d.type === 'status' || d.type === 'curse';
+    if (d.type === 'status' || d.type === 'curse') return false;
+    return d.color === codexSub;
+  }).sort((x, y) => {
+    const dx = CARD_DEFS[x], dy = CARD_DEFS[y];
+    const ord = { attack: 0, skill: 1, power: 2, status: 3, curse: 4 };
+    return (ord[dx.type] - ord[dy.type]) || ((dx.cost ?? 0) - (dy.cost ?? 0)) || dx.name.localeCompare(dy.name);
+  });
+  body.appendChild(el('p', { class: 'cx-count', text: `${ids.length}장 · 카드를 누르면 상세 설명이 열립니다` }));
+  const grid = el('div', { class: 'card-grid' });
+  ids.forEach((id) => {
+    const card = codexCard(id);
+    const ce = renderCard(card, { small: true });
+    ce.addEventListener('click', () => { if (!consumedLongPress()) { SFX.cardPick(); showCardDetail(card); } });
+    grid.appendChild(ce);
+  });
+  body.appendChild(grid);
+}
+
+function codexRelics(body) {
+  const ids = Object.keys(RELICS).filter((id) => codexSub === 'all' || RELICS[id].rarity === codexSub);
+  const ORD = { starter: 0, common: 1, uncommon: 2, rare: 3, shop: 4, boss: 5, event: 6 };
+  ids.sort((x, y) => (ORD[RELICS[x].rarity] - ORD[RELICS[y].rarity]) || RELICS[x].name.localeCompare(RELICS[y].name));
+  body.appendChild(el('p', { class: 'cx-count', text: `${ids.length}개` }));
+  const CHAR_KR = { green: '사일런트', blue: '디펙트', purple: '와쳐', red: '아이언클래드' };
+  ids.forEach((id) => {
+    const d = RELICS[id];
+    const row = el('div', { class: 'cx-row' });
+    row.innerHTML = `<div class="relic-big">${relicHTML(d, 28)}</div>`
+      + `<div class="cx-info"><b>${d.name}</b>`
+      + `<span class="cx-tag r-${d.rarity}">${RELIC_RARITY_KR[d.rarity] || d.rarity}</span>`
+      + (d.char ? `<span class="cx-tag who">${CHAR_KR[d.char] || d.char}</span>` : '')
+      + `<small>${d.desc}</small></div>`;
+    body.appendChild(row);
+  });
+}
+
+function codexPotions(body) {
+  const ORD = { common: 0, uncommon: 1, rare: 2 };
+  const ids = Object.keys(POTIONS).sort((x, y) =>
+    (ORD[POTIONS[x].rarity] - ORD[POTIONS[y].rarity]) || POTIONS[x].name.localeCompare(POTIONS[y].name));
+  body.appendChild(el('p', { class: 'cx-count', text: `${ids.length}종` }));
+  ids.forEach((id) => {
+    const d = POTIONS[id];
+    const row = el('div', { class: 'cx-row' });
+    row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 28)}</div>`
+      + `<div class="cx-info"><b>${d.name}</b>`
+      + `<span class="cx-tag r-${d.rarity}">${RELIC_RARITY_KR[d.rarity] || d.rarity}</span>`
+      + (d.battleOnly ? '<span class="cx-tag who">전투 전용</span>' : '')
+      + `<small>${typeof d.desc === 'function' ? d.desc(1) : d.desc}</small></div>`;
+    body.appendChild(row);
+  });
+}
+
+const CHAR_MECHANIC = {
+  ironclad: '힘을 쌓아 공격을 키우고, 체력을 자원처럼 쓰는 정공법 캐릭터입니다.',
+  silent: '중독을 쌓아 서서히 녹이고, 소각되는 0비용 단검을 뿌립니다. 카드를 많이 뽑습니다.',
+  defect: '구체 3칸을 운용합니다. 번개·냉기·암흑·플라즈마를 충전해 두면 턴이 끝날 때마다 일합니다.',
+  watcher: '무자세·분노·평온·신성 네 가지 자세를 오갑니다. 분노는 피해가 2배지만 받는 피해도 2배입니다.',
+};
+
+function codexChars(body) {
+  CHAR_LIST.forEach((id) => {
+    const c = CHARACTERS[id];
+    const card = el('div', { class: 'cx-char' });
+    card.style.setProperty('--acc', c.accent);
+    const url = I3.characterIcon3D(id, c.model);
+    const deck = c.deck.map(([cid, n]) => `${CARD_DEFS[cid] ? CARD_DEFS[cid].name : cid}${n > 1 ? ` ×${n}` : ''}`).join(', ');
+    const relic = RELICS[c.relic];
+    card.innerHTML = `
+      <div class="cx-portrait">${url ? `<img src="${url}" alt="${c.name}">` : ''}</div>
+      <div class="cx-char-info">
+        <b>${c.name}</b> <em>${c.tagline}</em>
+        <p>${c.desc}</p>
+        <p class="cx-mech">${CHAR_MECHANIC[id] || ''}</p>
+        <ul>
+          <li><span>시작 체력</span> ${c.maxHp}</li>
+          <li><span>시작 유물</span> ${relic ? `${relic.name} — ${relic.desc}` : '-'}</li>
+          <li><span>시작 덱</span> ${deck}</li>
+        </ul>
+      </div>`;
+    body.appendChild(card);
+  });
+}
+
+function codexWords(body) {
+  body.appendChild(el('p', { class: 'cx-count', text: `${KEYWORD_LIST.length}개` }));
+  const ul = el('ul', { class: 'cd-kw glossary' });
+  KEYWORD_LIST.forEach(([name, desc, cls]) => {
+    ul.appendChild(el('li', {}, el('b', { class: cls, text: name }), ' — ' + desc));
+  });
+  body.appendChild(ul);
 }
 
 // ============================================================
@@ -419,6 +571,7 @@ function showGameMenu() {
       modalTitle('메뉴'),
       el('button', { class: 'btn', text: '덱 보기', onclick: () => { closeModal(); showDeck(); } }),
       el('button', { class: 'btn ghost', text: '유물 목록', onclick: () => { closeModal(); showRelicList(); } }),
+      el('button', { class: 'btn ghost', text: '도감', onclick: () => { closeModal(); showCodex('card', 'red'); } }),
       el('button', { class: 'btn ghost', text: '게임 방법', onclick: () => { closeModal(); showHelp(); } }),
       el('button', { class: 'btn ghost', text: '설정', onclick: () => { closeModal(); showSettings(); } }),
       el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '닫기', onclick: () => closeModal() })),

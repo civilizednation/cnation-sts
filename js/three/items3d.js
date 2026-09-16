@@ -3,6 +3,7 @@
 //  PNG 데이터 URL 로 돌려준다. (외부 이미지 0개 · 결과는 캐시)
 // ============================================================
 import * as THREE from 'three';
+import { buildPlayer } from './scene3d.js';
 
 let renderer = null, scene = null, camera = null, ready = false, broken = false;
 const cache = new Map();
@@ -519,6 +520,21 @@ export function cardIcon3D() {
       g.add(c);
     });
     url = bake(g);
+  } catch (e) { url = null; }
+  cache.set(k, url);
+  return url;
+}
+
+/** 캐릭터 초상 — 전투 씬의 절차적 모델을 그대로 구워서 쓴다 */
+export function characterIcon3D(charId, model) {
+  if (!init()) return null;
+  const k = `ch:${charId}`;
+  if (cache.has(k)) return cache.get(k);
+  let url = null;
+  try {
+    const { group } = buildPlayer(model);
+    group.rotation.y = 0.42;
+    url = bake(group);
   } catch (e) { url = null; }
   cache.set(k, url);
   return url;
