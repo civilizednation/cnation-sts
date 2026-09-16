@@ -767,6 +767,7 @@ export function setupBattle(battle) {
   orbObjs.length = 0;
   emptyRings = [];
 
+  clearStance();
   const p = buildPlayer(battle.run && battle.run.character ? battle.run.character.model : null);
   const pBlob = addBlobShadow(p.group, 1);
   p.group.position.set(-1.8, 0, 2.3);
@@ -1092,6 +1093,8 @@ function renderFrame() {
     emptyRings.forEach((r, k) => { r.rotation.z += dt * 0.4; });
   }
 
+  animateStance(t, dt);
+
   // 불빛 흔들림
   const fire = scene.userData.fire;
   if (fire) fire.intensity = 1.0 + Math.sin(t * 7.3) * 0.18 + Math.sin(t * 13.1) * 0.09;
@@ -1118,6 +1121,124 @@ function renderFrame() {
     if (k >= 1) { tw.done && tw.done(); tweens.splice(i, 1); }
   }
   renderer.render(scene, camera);
+}
+
+// ============================================================
+//  자세 기운 (와쳐) — 분노 붉은 / 평온 푸른 / 신성 금빛 기운이 피어오른다
+// ============================================================
+let stanceGroup = null;
+let stanceName = 'neutral';
+const stanceMotes = [];
+
+const STANCE_FX = {
+  wrath:    { color: 0xff3a24, glow: 0xff7a40, speed: 1.55, motes: 18, spin: 1.5 },
+  calm:     { color: 0x3aa8ff, glow: 0x9ae0ff, speed: 0.75, motes: 13, spin: 0.5 },
+  divinity: { color: 0xffc83a, glow: 0xfff0b0, speed: 1.15, motes: 22, spin: 1.0 },
+};
+
+function clearStance() {
+  if (!stanceGroup) return;
+  const owner = stanceGroup.parent;
+  if (owner) owner.remove(stanceGroup);
+  stanceGroup.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m && m.dispose());
+  });
+  stanceGroup = null;
+  stanceMotes.length = 0;
+}
+
+/** 자세가 바뀔 때마다 호출 — 'neutral' 이면 기운을 걷는다 */
+export function setStance(stance, player) {
+  if (!ready) return;
+  stanceName = stance || 'neutral';
+  clearStance();
+  const cfg = STANCE_FX[stanceName];
+  if (!cfg) return;
+  const pm = player && models.get(player.uid);
+  if (!pm) return;
+
+  const g = new THREE.Group();
+  const soft = (color, opacity) => new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+
+  // 발밑에서 도는 고리 2겹
+  [[0.92, 0.055, 0.5], [1.18, 0.032, 0.28]].forEach(([r, tube, op], i) => {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 30), soft(cfg.color, op));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.05 + i * 0.03;
+    ring.userData.ring = 1 + i;
+    g.add(ring);
+  });
+  // 몸을 감싸는 기운 기둥 — 위로 갈수록 사라지도록 꼭짓점 색으로 페이드
+  const colGeo = new THREE.CylinderGeometry(0.62, 0.95, 2.9, 16, 3, true);
+  const pos = colGeo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const base = new THREE.Color(cfg.glow);
+  for (let i = 0; i < pos.count; i++) {
+    // y 는 -1.45 ~ +1.45 : 아래가 진하고 위는 검게(가산합성에서 사라짐)
+    const k = Math.max(0, 1 - (pos.getY(i) + 1.45) / 2.9);
+    col[i * 3] = base.r * k; col[i * 3 + 1] = base.g * k; col[i * 3 + 2] = base.b * k;
+  }
+  colGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const column = new THREE.Mesh(colGeo, new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.30, depthWrite: false,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  column.position.y = 1.45;
+  g.add(column);
+
+  // 피어오르는 기운 알갱이
+  const moteGeo = new THREE.OctahedronGeometry(0.075, 0);
+  for (let i = 0; i < cfg.motes; i++) {
+    const m = new THREE.Mesh(moteGeo.clone(), soft(i % 4 === 0 ? cfg.glow : cfg.color, 0.6));
+    const a = Math.random() * Math.PI * 2;
+    const r = 0.35 + Math.random() * 0.62;
+    m.userData.mote = { a, r, t: Math.random(), sp: (0.55 + Math.random() * 0.6) * cfg.speed, sc: 0.6 + Math.random() * 0.9 };
+    g.add(m);
+    stanceMotes.push(m);
+  }
+  // 신성은 머리 위에 후광까지
+  if (stanceName === 'divinity') {
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.045, 6, 24), soft(cfg.glow, 0.8));
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = 2.62;
+    halo.userData.halo = true;
+    g.add(halo);
+  }
+  g.userData.cfg = cfg;
+  pm.group.add(g);
+  stanceGroup = g;
+}
+
+/** 애니메이션 루프에서 호출 */
+function animateStance(t, dt) {
+  if (!stanceGroup) return;
+  const cfg = stanceGroup.userData.cfg;
+  stanceGroup.children.forEach((o) => {
+    const ud = o.userData;
+    if (ud.ring) {
+      o.rotation.z += dt * cfg.spin * (ud.ring === 1 ? 1 : -0.7);
+      const k = 1 + Math.sin(t * 2.2 * cfg.speed + ud.ring) * 0.06;
+      o.scale.set(k, k, 1);
+    } else if (ud.halo) {
+      o.rotation.z += dt * 0.9;
+      o.position.y = 2.62 + Math.sin(t * 1.8) * 0.06;
+    } else if (ud.mote) {
+      const p = ud.mote;
+      p.t += dt * p.sp * 0.42;
+      if (p.t > 1) { p.t -= 1; p.a = Math.random() * Math.PI * 2; p.r = 0.35 + Math.random() * 0.62; }
+      const ang = p.a + p.t * 1.8 * cfg.spin;
+      const rise = p.t * 2.9;
+      o.position.set(Math.cos(ang) * p.r * (1 - p.t * 0.35), 0.08 + rise, Math.sin(ang) * p.r * (1 - p.t * 0.35));
+      o.rotation.y += dt * 2.2;
+      o.rotation.x += dt * 1.4;
+      // 올라갈수록 작아지며 흐려진다
+      const fade = p.t < 0.12 ? p.t / 0.12 : (1 - (p.t - 0.12) / 0.88);
+      o.scale.setScalar(p.sc * (0.45 + fade * 0.75));
+      o.material.opacity = 0.6 * fade;
+    }
+  });
 }
 
 export function disposeScene() {

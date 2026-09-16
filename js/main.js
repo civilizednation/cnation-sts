@@ -588,6 +588,7 @@ function startBattle(encounter) {
   G.battle = B;
   G.selectedCard = null;
   S3.setupBattle(B);
+  if (B.stance && B.stance !== 'neutral') S3.setStance(B.stance, B.player);
   startOverlayLoop();
   renderBattle();
   B.start();
@@ -623,6 +624,10 @@ function battleFx(type, d) {
       break;
     case 'blocked':
       popup(d.actor, '방어', 'block');
+      break;
+    case 'stance':
+      // 와쳐의 자세 기운 : 분노 붉은빛 / 평온 푸른빛 / 신성 금빛
+      S3.setStance(d.stance, B.player);
       break;
     case 'block':
       S3.fxBlock(d.actor);
