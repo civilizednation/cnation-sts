@@ -307,6 +307,7 @@ const HELP_SECTIONS = [
     ['선택 취소', '화면 <b>맨 아래 빈 띠</b>(물약 줄 아래)나 액션바의 빈 공간을 탭하면 고른 카드가 손패 제자리로 돌아갑니다. 무대의 빈 곳을 탭해도 됩니다.'],
     ['대상 지정', '적이 여럿이면 <b>몬스터 본체를 탭</b>해 지정합니다. 지정 중인 적에게는 붉은 링이 표시됩니다.'],
     ['물약 사용', '상단바의 물약 칸을 탭하면 사용 여부를 고를 수 있습니다.'],
+    ['물약 칸이 꽉 찼을 때', '보상이나 상점에서 물약을 받으려는데 칸이 가득 차 있으면, <b>가진 물약을 설명과 함께 보여 주는 화면</b>이 뜹니다. 버릴 물약을 고르거나 "받지 않기" 를 눌러 이번 물약을 포기할 수 있습니다.'],
     ['턴 종료', '오른쪽 아래 "턴 종료" 를 누르면 적이 예고한 의도대로 행동합니다.'],
   ]],
   ['눌러서 보는 정보', [
@@ -1511,6 +1512,86 @@ async function playCardNow(card, target) {
 }
 
 // ---------------- 물약 ----------------
+/** 물약 한 줄 (아이콘 + 이름 + 설명) */
+function potionRowHTML(d, extra = '') {
+  return `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 26)}</div>`
+    + `<div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${extra}`
+    + `<br><small style="color:#9a92a8">${d.desc(potionMult())}</small></div>`;
+}
+/** 신성한 나무껍질(또는 숨겨진 보너스)이 있으면 물약 효과가 2배 */
+function potionMult() { return (G.run && (G.run.hasRelic('sacredBark') || G.run.cheat)) ? 2 : 1; }
+
+/**
+ * 물약을 얻는다. 칸이 가득 차 있으면 가진 물약을 버리고 받을지,
+ * 이번 물약을 포기할지 직접 고르게 한다.
+ * done(true)  = 얻었다 / done(false) = 포기했다
+ * 모달을 띄울 수 있으므로, 호출한 쪽은 done 안에서 자기 화면을 다시 그려야 한다.
+ */
+function takePotion(id, done) {
+  const run = G.run;
+  if (run.hasRelic('sozu')) {
+    toast(`${RELICS.sozu ? RELICS.sozu.name : '소주'} 때문에 물약을 얻을 수 없습니다.`);
+    done(false); return;
+  }
+  if (run.addPotion(id)) { SFX.potion(); done(true); return; }
+  showPotionSwap(id, done);
+}
+
+/** 물약 칸이 가득 찼을 때 — 버릴 물약 고르기 */
+function showPotionSwap(newId, done) {
+  const run = G.run;
+  const nd = POTIONS[newId];
+  openModal((box) => {
+    box.append(modalTitle('물약 칸이 가득 찼습니다'));
+
+    const gain = el('div', { class: 'reward-row swap-new' });
+    gain.innerHTML = potionRowHTML(nd, ' <span class="swap-tag">새 물약</span>');
+    box.appendChild(gain);
+
+    box.appendChild(modalText('버릴 물약을 고르세요.'));
+
+    run.potions.forEach((p, i) => {
+      if (!p) return;
+      const d = POTIONS[p.id];
+      if (!d) return;
+      const row = el('button', { class: 'reward-row' });
+      row.innerHTML = potionRowHTML(d);
+      row.addEventListener('click', () => { SFX.tap(); confirmPotionSwap(i, newId, done); });
+      box.appendChild(row);
+    });
+
+    box.append(el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn ghost', text: '받지 않기', onclick: () => { SFX.tap(); done(false); } })));
+  }, { focus: 'potion' });
+}
+
+/** 정말 버릴지 한 번 확인 (위에 얹어 띄우고, 취소하면 목록으로 돌아온다) */
+function confirmPotionSwap(idx, newId, done) {
+  const run = G.run;
+  const od = POTIONS[run.potions[idx].id];
+  const nd = POTIONS[newId];
+  openModal((box) => {
+    const drop = el('div', { class: 'reward-row swap-drop' });
+    drop.innerHTML = potionRowHTML(od, ' <span class="swap-tag drop">버림</span>');
+    const gain = el('div', { class: 'reward-row swap-new' });
+    gain.innerHTML = potionRowHTML(nd, ' <span class="swap-tag">얻음</span>');
+    box.append(
+      modalTitle('바꾸시겠습니까?'),
+      drop,
+      el('div', { class: 'swap-arrow', html: svgIcon('arrowDown', { size: 20, color: '#8a82a0' }) }),
+      gain,
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn gold', text: '바꾸기', onclick: () => {
+          SFX.potion();
+          run.potions[idx] = { id: newId };
+          saveRun(run);
+          done(true);
+        } }),
+        el('button', { class: 'btn ghost', text: '취소', onclick: () => { SFX.tap(); closeModal(); } })),
+    );
+  }, { stack: true, focus: 'potion' });
+}
+
 function usePotionPrompt(idx) {
   const run = G.run;
   const p = run.potions[idx];
@@ -1787,10 +1868,10 @@ function rewardRow(rw, idx, taken, rebuild) {
   } else if (rw.type === 'potion') {
     const d = POTIONS[rw.id];
     if (!d) return null;
-    row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 26)}</div><div><b style="color:#e8c34a">${d.name}</b><br><small style="color:#9a92a8">${d.desc(1)}</small></div>`;
+    row.innerHTML = potionRowHTML(d);
     row.addEventListener('click', () => {
-      if (!run.addPotion(rw.id)) { toast('물약 슬롯이 가득 찼습니다.'); return; }
-      SFX.potion(); take();
+      // 칸이 가득 찼으면 가진 물약을 버리고 받을지 직접 고르게 한다
+      takePotion(rw.id, (ok) => { if (ok) take(); else rebuild(); });
     });
 
   } else if (rw.type === 'relic') {
@@ -2051,11 +2132,13 @@ function showShop() {
         if (it.sold) return;
         const d = POTIONS[it.id];
         const row = el('button', { class: 'reward-row' });
-        row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 26)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc(1)}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
+        row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 26)}</div><div style="flex:1"><b style="color:#e8c34a">${d.name}</b>${it.saleRate ? ` <span class="sale-tag">${it.saleLabel}</span>` : ''}<br><small style="color:#9a92a8">${d.desc(potionMult())}</small></div><span class="price${run.gold < it.price ? ' cant' : ''}">${it.saleRate ? `<s>${it.oldPrice}G</s> ` : ''}${it.price}G</span>`;
         row.addEventListener('click', () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
-          if (!run.addPotion(it.id)) { toast('물약 슬롯이 가득 찼습니다.'); return; }
-          run.spendGold(it.price); it.sold = true; SFX.potion(); rebuild();
+          takePotion(it.id, (ok) => {
+            if (ok) { run.spendGold(it.price); it.sold = true; }
+            rebuild();
+          });
         });
         box.appendChild(row);
       });

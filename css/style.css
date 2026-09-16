@@ -669,11 +669,21 @@ html, body {
 }
 .choice-secret:active, .choice-secret:focus { background: none; border: 0; outline: none; }
 .reward-row {
-  width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 12px;
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 12px; text-align: left;
   background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px;
   font-family: inherit; color: var(--text); font-size: 14px;
 }
 .reward-row.taken { opacity: .35; pointer-events: none; }
+/* 물약 칸이 가득 찼을 때 — 바꿀 물약 고르기 */
+.swap-new, .swap-drop { cursor: default; }
+.swap-new { border-color: #4a7a5a; background: rgba(26,44,34,.75); }
+.swap-drop { border-color: #7a4a4a; background: rgba(44,26,26,.75); }
+.swap-tag {
+  font-size: 10px; font-weight: 700; color: #0d0a12; background: #6ad08a;
+  border-radius: 999px; padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+}
+.swap-tag.drop { background: #e08a8a; }
+.swap-arrow { display: grid; place-items: center; opacity: .8; }
 .relic-big {
   width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto;
   background: linear-gradient(160deg, rgba(64,54,86,.95), rgba(26,21,36,.95));
