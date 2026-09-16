@@ -34,7 +34,10 @@
       <div class="title-menu">
         <button class="btn big" id="btn-new">새 게임</button>
         <button class="btn big ghost" id="btn-continue">이어하기</button>
-        <button class="btn ghost" id="btn-help">게임 방법</button>
+        <div class="title-menu-row">
+          <button class="btn ghost" id="btn-help">게임 방법</button>
+          <button class="btn ghost" id="btn-codex">백과사전</button>
+        </div>
       </div>
       <div class="title-foot">원작 규칙 재현 · 아이언클래드 75종 카드 · 몬스터 57종</div>
     </div>
@@ -99,15 +102,16 @@
   <section class="screen" id="scr-history" hidden>
     <header class="history-top">
       <h2>Revision History</h2>
+      <span class="history-credit">제작 : cnation(문명국)</span>
       <button class="btn sm" id="btn-history-home">홈으로</button>
     </header>
     <div class="history-body" id="history-body"></div>
   </section>
 
-  <!-- ============ 도감 ============ -->
+  <!-- ============ 백과사전 ============ -->
   <section class="screen" id="scr-codex" hidden>
     <header class="history-top">
-      <h2 id="codex-title">도감</h2>
+      <h2 id="codex-title">백과사전</h2>
       <button class="btn sm" id="btn-codex-close">닫기</button>
     </header>
     <div class="codex-tabs" id="codex-tabs"></div>

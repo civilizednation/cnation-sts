@@ -136,6 +136,7 @@ function initTitle() {
     goMap();
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
+  $('#btn-codex').addEventListener('click', () => { unlockAudio(); SFX.tap(); showCodex('card', 'red'); });
   if (!localStorage.getItem('cnation_sts_save_v1')) $('#btn-continue').disabled = true;
 }
 
@@ -264,13 +265,13 @@ const HELP_SECTIONS = [
     ['적의 다음 행동', '적 머리 위의 <b>의도 아이콘을 탭</b>하면 그 행동이 무엇인지, 예상 피해와 거는 효과가 무엇인지 설명이 나옵니다.'],
     ['유물 / 상태이상', '상단바의 유물이나 캐릭터 옆 상태이상 아이콘을 탭하면 설명이 나옵니다.'],
     ['카드 더미', '"뽑을 / 버린 / 소각" 을 탭하면 그 더미에 어떤 카드가 있는지 볼 수 있습니다.'],
-    ['용어집', '이 화면의 "용어집" 버튼에서 게임에 나오는 용어 전체를 볼 수 있습니다.'],
+    ['백과사전', '타이틀 화면의 <b>백과사전</b> 버튼(게임 중에는 메뉴 ☰ → 백과사전)에서 카드 · 유물 · 물약 · 캐릭터 · 용어 전체를 찾아볼 수 있습니다.'],
   ]],
   ['화면 구성', [
     ['위쪽 1행', '체력 · 골드 · 물약 칸 · 현재 막/층'],
     ['위쪽 2행', '지금까지 얻은 유물이 왼쪽부터 나열됩니다.'],
     ['선택 화면', '보상·모닥불·상점·이벤트 화면 위쪽에는 항상 내 체력·골드·남은 물약 칸이 표시되어, 무엇을 고를지 바로 판단할 수 있습니다.'],
-    ['메뉴 ☰', '덱 보기 · 유물 목록 · 게임 방법 · 설정으로 들어갑니다.'],
+    ['메뉴 ☰', '덱 보기 · 유물 목록 · 백과사전 · 게임 방법 · 설정으로 들어갑니다.'],
   ]],
   ['지도', [
     ['이동', '위아래로 밀어 둘러보고, 금색 화살표가 가리키는 <b>빛나는 방</b>을 탭해 이동합니다.'],
@@ -296,13 +297,12 @@ function showHelp() {
       body.appendChild(sec);
     });
     box.append(body, el('div', { class: 'modal-actions' },
-      el('button', { class: 'btn', text: '도감', onclick: () => { SFX.tap(); closeModal(); showCodex('card', 'red'); } }),
-      el('button', { class: 'btn ghost', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
+      el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
   });
 }
 
 // ============================================================
-//  도감 — 카드 / 유물 / 물약 / 캐릭터 / 용어
+//  백과사전 — 카드 / 유물 / 물약 / 캐릭터 / 용어
 // ============================================================
 const CODEX_TABS = [
   ['card', '카드'], ['relic', '유물'], ['potion', '물약'], ['char', '캐릭터'], ['word', '용어'],
@@ -318,7 +318,7 @@ const RELIC_GROUPS = [
 let codexTab = 'card';
 let codexSub = 'red';
 
-/** 한 번 만든 카드 인스턴스는 재사용한다 (도감은 강화 전 기준) */
+/** 한 번 만든 카드 인스턴스는 재사용한다 (백과사전은 강화 전 기준) */
 const codexCardCache = new Map();
 function codexCard(id) {
   if (!codexCardCache.has(id)) codexCardCache.set(id, mk(id));
@@ -571,7 +571,7 @@ function showGameMenu() {
       modalTitle('메뉴'),
       el('button', { class: 'btn', text: '덱 보기', onclick: () => { closeModal(); showDeck(); } }),
       el('button', { class: 'btn ghost', text: '유물 목록', onclick: () => { closeModal(); showRelicList(); } }),
-      el('button', { class: 'btn ghost', text: '도감', onclick: () => { closeModal(); showCodex('card', 'red'); } }),
+      el('button', { class: 'btn ghost', text: '백과사전', onclick: () => { closeModal(); showCodex('card', 'red'); } }),
       el('button', { class: 'btn ghost', text: '게임 방법', onclick: () => { closeModal(); showHelp(); } }),
       el('button', { class: 'btn ghost', text: '설정', onclick: () => { closeModal(); showSettings(); } }),
       el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '닫기', onclick: () => closeModal() })),
