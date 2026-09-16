@@ -304,6 +304,7 @@ const HELP_SECTIONS = [
   ]],
   ['전투 조작', [
     ['카드 사용', '카드를 탭하면 선택되어 위로 떠오릅니다. 한 번 더 탭하거나 위로 밀면 사용합니다.'],
+    ['손패가 많을 때', '손에 카드가 <b>7장 이상</b>이면 자동으로 <b>두 줄</b>로 펼쳐집니다. 카드가 서로 가리지 않아 이름과 설명을 모두 읽을 수 있습니다.'],
     ['선택 취소', '화면 <b>맨 아래 빈 띠</b>(물약 줄 아래)나 액션바의 빈 공간을 탭하면 고른 카드가 손패 제자리로 돌아갑니다. 무대의 빈 곳을 탭해도 됩니다.'],
     ['대상 지정', '적이 여럿이면 <b>몬스터 본체를 탭</b>해 지정합니다. 지정 중인 적에게는 붉은 링이 표시됩니다.'],
     ['물약 사용', '상단바의 물약 칸을 탭하면 사용 여부를 고를 수 있습니다.'],
@@ -1248,6 +1249,10 @@ function initCardInspect() {
     document.addEventListener(ev, cancelLongPress, true));
 }
 
+// 손패를 두 줄로 펼치기 시작하는 장수와 그때의 카드 축소 배율
+const HAND_TWO_ROW = 7;
+const HAND_TWO_ROW_SCALE = 0.85;
+
 // 카드를 뽑는 연출 : 한 장이 날아오는 시간 / 장 사이 간격
 const DRAW_DUR = 0.62;
 const DRAW_STAGGER = 0.1;
@@ -1348,18 +1353,38 @@ function renderHand() {
   handEl.innerHTML = '';
   const n = B.hand.length;
   const w = handEl.clientWidth || innerWidth - 100;
-  const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w')) || 88;
+  const rootCS = getComputedStyle(document.documentElement);
+  const cwBase = parseFloat(rootCS.getPropertyValue('--card-w')) || 88;
+  const chBase = parseFloat(rootCS.getPropertyValue('--card-h')) || 126;
+
+  // 손패가 많으면 한 줄에 다 펼칠 수 없어 카드가 서로를 가린다.
+  // HAND_TWO_ROW 장 이상이면 두 줄로 나누고 카드를 조금 줄여, 각 줄에서
+  // 카드가 거의 겹치지 않게 한다. 뒷줄은 무대 아래쪽 빈 공간으로 올라간다.
+  const two = n >= HAND_TWO_ROW;
+  const scale = two ? HAND_TWO_ROW_SCALE : 1;
+  const cw = cwBase * scale;
+  const rowLift = two ? Math.round(chBase * scale + 6) : 0;
+  const topCount = two ? Math.floor(n / 2) : 0;   // 뒷줄(위)에 놓을 장수
+  const scr = $('#scr-battle');
+  if (scr) {
+    scr.classList.toggle('hand-two-rows', two);
+    scr.style.setProperty('--row-lift', rowLift + 'px');
+  }
+
   const preview = (card, key, base) => B.previewValue(card, key, base);
   const fresh = [];
   B.hand.forEach((card, i) => {
     const reused = flying.get(card.uid);
     const c = reused || renderCard(card, { preview });
     c.dataset.uid = card.uid;
-    const t = n === 1 ? 0.5 : i / (n - 1);
-    const spread = Math.min(w - cw - 42, Math.max(0, (n - 1) * cw * 0.86));
+    const back = two && i < topCount;               // 뒷줄인가
+    const cnt = !two ? n : (back ? topCount : n - topCount);
+    const k = back ? i : i - topCount;
+    const t = cnt === 1 ? 0.5 : k / (cnt - 1);
+    const spread = Math.min(w - cw - 42, Math.max(0, (cnt - 1) * cw * 0.86));
     const x = w / 2 + (t - 0.5) * spread - cw / 2;
-    const ang = n === 1 ? 0 : (t - 0.5) * Math.min(13, n * 2.2);
-    const y = -Math.cos((t - 0.5) * Math.PI) * Math.min(10, n * 1.6) + 8;
+    const ang = cnt === 1 ? 0 : (t - 0.5) * Math.min(13, cnt * 2.2);
+    const y = -Math.cos((t - 0.5) * Math.PI) * Math.min(10, cnt * 1.6) + 8 - (back ? rowLift : 0);
     const isSel = !!(G.selectedCard && G.selectedCard.uid === card.uid);
     const leftPx = (isSel ? (w / 2 - cw / 2) : x) + 'px';
     const tf = `translateY(${y}px) rotate(${ang}deg)`;

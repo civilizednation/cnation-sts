@@ -371,6 +371,13 @@ html, body {
 
 /* ---------- 손패 ---------- */
 .handbar { position: relative; flex: 0 0 auto; height: calc(var(--card-h) + 18px); }
+/* 손패가 많으면 두 줄로 펼친다 — 뒷줄은 무대 아래쪽 빈 공간으로 올라간다.
+   더미 버튼과 전투 기록도 그만큼 위로 올려 가려지지 않게 한다. */
+#scr-battle.hand-two-rows .handbar .card { --hand-scale: .85; }
+#scr-battle.hand-two-rows .hand-side { bottom: calc(100% - 10px + var(--row-lift, 0px)); }
+#scr-battle.hand-two-rows .battle-log { bottom: calc(40px + var(--row-lift, 0px)); }
+/* 두 줄일 때는 카드가 작아지므로, 고른 카드는 한 줄일 때와 같은 크기로 키운다 */
+#scr-battle.hand-two-rows .card.selected { transform: translateY(-70px) scale(1.82) rotate(0deg) !important; }
 .hand { position: absolute; inset: 0; }
 .hand-side { position: absolute; bottom: calc(100% - 10px); display: flex; flex-direction: row; gap: 4px; z-index: 40; }
 .hand-side.left { left: 3px; } .hand-side.right { right: 3px; }
@@ -383,10 +390,14 @@ html, body {
 
 /* 카드 */
 .card {
-  position: absolute; bottom: 0; width: var(--card-w); height: var(--card-h);
+  /* 손패가 많아 두 줄로 펼칠 때 카드를 조금 줄인다 (1 = 원래 크기) */
+  --hand-scale: 1;
+  position: absolute; bottom: 0;
+  width: calc(var(--card-w) * var(--hand-scale));
+  height: calc(var(--card-h) * var(--hand-scale));
   /* 이름표를 그림 위로 끌어올리는 양 (카드 높이의 13% — 예전 top:27% 와 같은 자리) */
-  --nb-lift: calc(var(--card-h) * .13);
-  --desc-fs: 9.2px;   /* 설명 글자 크기 (긴 설명은 이 값을 기준으로 줄인다) */
+  --nb-lift: calc(var(--card-h) * var(--hand-scale) * .13);
+  --desc-fs: calc(9.2px * var(--hand-scale));   /* 설명 글자 크기 */
   transform-origin: 50% 130%;
   transition: transform .18s cubic-bezier(.2,.8,.3,1), left .18s cubic-bezier(.2,.8,.3,1), filter .18s;
   will-change: transform; cursor: pointer;
@@ -797,12 +808,12 @@ html, body {
 /* 작은 화면 대응 */
 @media (max-height: 700px) {
   :root { --card-w: 76px; --card-h: 108px; }
-  .card { --desc-fs: 8.5px; }
+  .card { --desc-fs: calc(8.5px * var(--hand-scale)); }
   .card-name { font-size: 9px; }
 }
 @media (min-width: 520px) {
   :root { --card-w: 100px; --card-h: 142px; }
-  .card { --desc-fs: 10.8px; }
+  .card { --desc-fs: calc(10.8px * var(--hand-scale)); }
   .card-name { font-size: 11.5px; }
 }
 
