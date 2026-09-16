@@ -963,6 +963,9 @@ function popup(actor, text, cls) {
 function renderBattle() {
   const B = G.battle;
   if (!B) return;
+  // 분열·소환으로 적이 늘어나면 곧바로 3D 모델을 만들어 준다
+  // (적 구성이 그대로면 layoutEnemies 는 아무 일도 하지 않는다)
+  S3.layoutEnemies(B);
   renderTopbar('#battle-top');
   $('#draw-count').textContent = B.drawPile.length;
   $('#discard-count').textContent = B.discardPile.length;
@@ -1492,7 +1495,6 @@ async function playCardNow(card, target) {
   const B = G.battle;
   G.selectedCard = null; G.targeting = false;
   await B.playCard(card, target);
-  S3.layoutEnemies(B);
   renderBattle();
   if (B.over) return;
 }
@@ -1535,7 +1537,7 @@ async function usePotion(idx, target) {
   run.potions[idx] = null;
   SFX.potion();
   await d.use(G.battle, mult, target, run);
-  if (G.battle) { S3.layoutEnemies(G.battle); renderBattle(); G.battle.checkEnd(); if (G.battle.over) G.battle.finish(); }
+  if (G.battle) { renderBattle(); G.battle.checkEnd(); if (G.battle.over) G.battle.finish(); }
   else renderTopbar('#map-top');
   saveRun(run);
 }

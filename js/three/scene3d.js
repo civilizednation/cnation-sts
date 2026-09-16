@@ -775,12 +775,25 @@ export function setupBattle(battle) {
   root.add(p.group);
   models.set(battle.player.uid, { ...p, blob: pBlob, base: p.group.position.clone(), actor: battle.player, shape: { size: 1 } });
 
+  lastLayoutKey = '';
   layoutEnemies(battle);
 }
 
-export function layoutEnemies(battle) {
+// 살아 있는 적 구성이 바뀌었을 때만 다시 배치한다.
+// (매 렌더마다 위치를 덮어쓰면 공격 모션 중인 모델이 제자리로 튕겨 나간다)
+let lastLayoutKey = '';
+
+/**
+ * 살아 있는 적에 맞춰 3D 모델을 만들고 배치한다.
+ * 분열·소환처럼 전투 도중 적이 늘어나는 경우에도 곧바로 모델이 생기도록
+ * renderBattle() 에서 매번 호출한다 — 구성이 그대로면 아무 일도 하지 않는다.
+ */
+export function layoutEnemies(battle, force = false) {
   if (!ready) return;
   const list = battle.enemies.filter((e) => e.alive);
+  const key = list.map((e) => e.uid).join(',');
+  if (!force && key === lastLayoutKey) return;
+  lastLayoutKey = key;
   list.forEach((e, i) => {
     if (models.has(e.uid)) return;
     const m = buildEnemy(e.shape || {});

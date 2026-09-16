@@ -1,6 +1,6 @@
 # cnation STS — 첨탑을 오르다
 
-> **Version 1.1.8**
+> **Version 1.1.9**
 
 원작 **Slay the Spire (1편)** 의 규칙을 그대로 재현한 **모바일 세로형 웹 게임**입니다.
 스마트폰 브라우저에서 바로 실행되며, 컴퓨터(AI)가 조종하는 몬스터와 1층부터 50층까지 대결합니다.
@@ -173,6 +173,12 @@ Slay the Spire 는 **Mega Crit** 의 저작물입니다.
 ---
 
 ## 8. 변경 이력
+
+### v1.1.9
+- **버그 수정** — 슬라임 분열 직후 몬스터가 화면에서 사라지고, 플레이어가 카드를 한 장 사용해야 나뉜 슬라임이 나타나던 문제
+  - 원인 : 새 적의 3D 모델을 만드는 `S3.layoutEnemies()` 가 `playCardNow()` / `usePotion()` 에서만 호출되고 있었음. 분열·소환은 적 턴에 일어나므로 `battleUI.render()` → `renderBattle()` 경로로는 모델이 생기지 않아 `screenPos()` 가 `null` → 라벨까지 `display:none`
+  - 수정 : `renderBattle()` 이 매번 `S3.layoutEnemies(B)` 를 호출한다. 대신 `layoutEnemies` 가 살아 있는 적의 uid 목록을 키로 기억해, 구성이 그대로면 즉시 반환 (매 렌더마다 위치를 덮어써 공격 모션 중인 모델이 튕기는 것을 방지)
+  - 같은 원인이던 **수하 소환**(`summon`) 도 함께 해결
 
 ### v1.1.8
 - **유닛 탭 → 걸린 상태 전체 설명** (`statusTooltip` / `showStatusInfo`)
