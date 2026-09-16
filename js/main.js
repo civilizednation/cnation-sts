@@ -38,6 +38,7 @@ const G = {
 window.G = G;
 window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // 자동 테스트용
+window.__fight = (ids) => startBattle({ monsters: ids, kind: 'boss' });     // 자동 테스트용
 
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-modal'];
 function showScreen(id) {
@@ -720,8 +721,13 @@ function positionUnits() {
     if (!p) { u.style.display = 'none'; return; }
     u.style.display = '';
     const stage = u.parentElement.getBoundingClientRect();
-    u.style.left = clamp(p.x, 60, stage.width - 60) + 'px';
-    u.style.top = clamp(p.y, 26, stage.height - 40) + 'px';
+    // .unit 은 translate(-50%,-100%) 이라 top 이 라벨 묶음의 '아래쪽'이다.
+    // 의도 아이콘까지 화면 안에 들어오도록 실제 높이만큼 여유를 두고 잘라 낸다.
+    const h = u.offsetHeight || 62;
+    const halfW = Math.min(u.offsetWidth || 120, stage.width - 12) / 2;
+    const minTop = Math.min(h + 8, stage.height - 40);
+    u.style.left = clamp(p.x, halfW + 6, Math.max(halfW + 6, stage.width - halfW - 6)) + 'px';
+    u.style.top = clamp(p.y, minTop, stage.height - 40) + 'px';
   });
 }
 

@@ -298,6 +298,7 @@ export function initScene(canvas) {
 }
 
 let frameWidth = 7.6;   // 화면에 담아야 할 가로 폭(월드 단위)
+let frameTop = 0;       // 화면 위쪽 끝이 담아야 할 월드 높이 — 키 큰 보스 대응
 export function resize() {
   if (!ready || !canvasEl) return;
   const w = canvasEl.clientWidth || 1, h = canvasEl.clientHeight || 1;
@@ -316,11 +317,22 @@ function frameCamera() {
   let fov = 2 * Math.atan(halfH / dist) * (180 / Math.PI);
   fov = Math.max(28, Math.min(72, fov));
   camera.fov = fov;
-  camera.position.set(0, 3.3, dist);
-  camera.lookAt(0, 0.95, 0);
+
+  // 키 큰 보스는 머리 위 의도 표시가 화면 밖으로 밀리므로, 시점을 통째로 들어 올린다.
+  // (카메라와 주시점을 같은 양만큼 올리면 기울기는 그대로 두고 화면만 위로 이동한다)
+  const CAM_Y = 3.3, LOOK_Y = 0.95;
+  const halfFov = fov * Math.PI / 360;
+  const tilt = Math.atan((CAM_Y - LOOK_Y) / dist);
+  const topAtBase = CAM_Y + dist * Math.tan(Math.max(0.02, halfFov - tilt));
+  const rise = Math.max(0, Math.min(2.6, frameTop - topAtBase));
+
+  camera.position.set(0, CAM_Y + rise, dist);
+  camera.lookAt(0, LOOK_Y + rise, 0);
   camera.updateProjectionMatrix();
 }
 export function setFrameWidth(w) { frameWidth = Math.max(6.4, w); frameCamera(); }
+/** 화면 위쪽 끝이 담아야 할 월드 높이 (가장 큰 적의 머리 + 라벨 여유) */
+export function setFrameTop(y) { frameTop = Math.max(0, y); frameCamera(); }
 
 // ---------------- 재질 헬퍼 ----------------
 /** 전체 톤을 밝게 : 명도 +0.16, 채도 +0.06 */
@@ -791,8 +803,24 @@ export function layoutEnemies(battle) {
     const half = (m.shape.size || 1) * 1.1;
     maxX = Math.max(maxX, x + half);
   });
+  // 각 적의 실제 모델 높이를 재 둔다 (머리 위 라벨 위치 · 카메라 세로 프레임에 사용)
+  let maxTop = 2.6;
+  list.forEach((e) => {
+    const m = models.get(e.uid);
+    if (!m) return;
+    if (m.topY === undefined) {
+      const box = new THREE.Box3();
+      m.group.traverse((o) => { if (o.isMesh && o !== m.blob) box.expandByObject(o); });
+      const gp = new THREE.Vector3();
+      m.group.getWorldPosition(gp);
+      m.topY = Number.isFinite(box.max.y) ? Math.max(0.8, box.max.y - gp.y) : 1.6 + ((m.shape && m.shape.size) || 1) * 1.5;
+    }
+    maxTop = Math.max(maxTop, m.topY);
+  });
   // 카메라 프레임 폭 : 플레이어(-2.3) ~ 가장 오른쪽 적까지 + 여백
   setFrameWidth(Math.max(maxX + 3.4, 8.0) * 1.05);
+  // 세로 : 가장 큰 적의 머리 + 라벨 여유까지 화면에 담기게 시점을 들어 올린다
+  setFrameTop(maxTop + 1.9);
   // 죽은 적 정리
   models.forEach((m, uid) => {
     if (m.actor && m.actor.isPlayer) return;
@@ -807,8 +835,25 @@ export function screenPos(actor, heightOffset = 0) {
   const v = new THREE.Vector3();
   m.group.getWorldPosition(v);
   const h = (m.shape && m.shape.size ? m.shape.size : 1);
-  // 구체가 떠 있으면 이름/체력바를 조금 더 위로 올려 겹치지 않게 한다
-  v.y += heightOffset || (actor.isPlayer ? (orbObjs.length ? 3.5 : 2.9) : 1.6 + h * 1.5);
+  let off = heightOffset;
+  if (!off) {
+    if (actor.isPlayer) {
+      // 구체가 떠 있으면 이름/체력바를 조금 더 위로 올려 겹치지 않게 한다
+      off = orbObjs.length ? 3.5 : 2.9;
+    } else {
+      // 몬스터마다 실제 모델 높이를 재서 머리 바로 위에 붙인다
+      // (크기 추정치로 띄우면 키 큰 보스는 라벨이 화면 위로 밀려 잘린다)
+      if (m.topY === undefined) {
+        const box = new THREE.Box3();
+        m.group.traverse((o) => { if (o.isMesh && o !== m.blob) box.expandByObject(o); });
+        const gp = new THREE.Vector3();
+        m.group.getWorldPosition(gp);
+        m.topY = Number.isFinite(box.max.y) ? Math.max(0.8, box.max.y - gp.y) : 1.6 + h * 1.5;
+      }
+      off = m.topY + 0.35;
+    }
+  }
+  v.y += off;
   v.project(camera);
   const rect = canvasEl.getBoundingClientRect();
   return {
