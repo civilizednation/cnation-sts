@@ -832,16 +832,106 @@ function startOverlayLoop() {
 function stopOverlayLoop() { if (G.overlayRAF) cancelAnimationFrame(G.overlayRAF); G.overlayRAF = null; }
 
 // ---------------- 손패 ----------------
+/** 더미 버튼(뽑을/버린/소각)의 화면 중심 좌표 */
+function pileAnchor(sel) {
+  const el = $(sel);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  if (!r.width) return null;
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+/** 뽑은 카드가 "뽑을" 더미에서 작게 날아와 제자리에서 커진다 */
+function flyCardIn(c, order) {
+  const src = pileAnchor('#btn-draw');
+  const handEl = $('#hand');
+  if (!src || !handEl) return false;
+  const hr = handEl.getBoundingClientRect();
+  const cw = c.offsetWidth || 88, ch = c.offsetHeight || 126;
+  // .card 는 bottom:0 기준, transform-origin 은 50% 130%
+  const ox = hr.left + parseFloat(c.style.left || 0) + cw / 2;
+  const oy = hr.top + hr.height - ch + ch * 1.3;
+  const dx = Math.round(src.x - ox), dy = Math.round(src.y - oy);
+  const finalT = c.style.transform;
+  const delay = order * 0.055;
+
+  c.classList.add('flying');
+  c.style.transition = 'none';
+  c.style.transform = `translate(${dx}px, ${dy}px) scale(0.16) ${finalT}`;
+  c.style.opacity = '0.2';
+  // 두 프레임 뒤에 최종 상태로 전환해야 시작 상태가 확실히 그려진다
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    c.style.transition = `transform .42s cubic-bezier(.2,.86,.3,1) ${delay}s, opacity .18s linear ${delay}s`;
+    c.style.transform = finalT;
+    c.style.opacity = '1';
+  }));
+  setTimeout(() => {
+    c.classList.remove('flying');
+    c.style.transition = '';
+    c.style.opacity = '';
+  }, 480 + delay * 1000);
+  return true;
+}
+
+/** 손에서 빠진 카드가 해당 더미로 작아지며 날아가 사라진다 */
+function flyCardOut(rec, targetSel, order = 0) {
+  const target = pileAnchor(targetSel);
+  if (!target) return;
+  const g = el('div', { class: 'card-ghost' });
+  g.appendChild(rec.node);   // 손패에서 떼어 낸 실제 노드를 그대로 재사용
+  g.style.width = rec.w + 'px';
+  g.style.height = rec.h + 'px';
+  g.style.left = (rec.cx - rec.w / 2) + 'px';
+  g.style.top = (rec.cy - rec.h / 2) + 'px';
+  document.body.appendChild(g);
+  const delay = order * 0.05;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    g.style.transition = `transform .40s cubic-bezier(.4,.02,.7,1) ${delay}s, opacity .34s ease-in ${delay + 0.06}s`;
+    g.style.transform = `translate(${Math.round(target.x - rec.cx)}px, ${Math.round(target.y - rec.cy)}px) rotate(${rec.spin}deg) scale(0.14)`;
+    g.style.opacity = '0';
+  }));
+  setTimeout(() => g.remove(), 520 + delay * 1000);
+}
+
 function renderHand() {
   const B = G.battle;
   const handEl = $('#hand');
+
+  // 1) 이전 손패와 비교해 새로 들어온 카드 / 빠져나간 카드를 가린다.
+  //    레이아웃 측정(getBoundingClientRect)은 실제로 빠져나간 카드에만 한다.
+  const before = new Set();
+  const gone = [];
+  const handUids = new Set(B.hand.map((c) => c.uid));
+  $$('#hand .card').forEach((node) => {
+    const uid = node.dataset.uid;
+    if (!uid) return;
+    before.add(uid);
+    if (!handUids.has(uid)) gone.push(node);
+  });
+  const outRecs = gone.map((node) => {
+    const r = node.getBoundingClientRect();
+    return {
+      node, w: node.offsetWidth, h: node.offsetHeight,
+      cx: r.left + r.width / 2, cy: r.top + r.height / 2,
+      spin: Math.round(Math.random() * 40 - 20),
+    };
+  });
+  // 날아오는 중인 카드는 노드를 살려 둔다 (중간에 다시 그려도 끊기지 않게)
+  const flying = new Map();
+  $$('#hand .card.flying').forEach((node) => {
+    if (node.dataset.uid) { flying.set(node.dataset.uid, node); handEl.removeChild(node); }
+  });
+
   handEl.innerHTML = '';
   const n = B.hand.length;
   const w = handEl.clientWidth || innerWidth - 100;
   const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-w')) || 88;
   const preview = (card, key, base) => B.previewValue(card, key, base);
+  const fresh = [];
   B.hand.forEach((card, i) => {
-    const c = renderCard(card, { preview });
+    const reused = flying.get(card.uid);
+    const c = reused || renderCard(card, { preview });
+    c.dataset.uid = card.uid;
     const t = n === 1 ? 0.5 : i / (n - 1);
     const spread = Math.min(w - cw - 42, Math.max(0, (n - 1) * cw * 0.86));
     const x = w / 2 + (t - 0.5) * spread - cw / 2;
@@ -853,15 +943,34 @@ function renderHand() {
     // 선택 취소 시 되돌아갈 원래 자리
     c.dataset.homeLeft = x + 'px';
     c.dataset.homeTransform = c.style.transform;
-    if (!B.canPlay(card)) c.classList.add('unplayable-now');
+    c.classList.toggle('unplayable-now', !B.canPlay(card));
     if (G.selectedCard && G.selectedCard.uid === card.uid) {
       c.classList.add('selected');
       // 선택된 카드는 손패 가운데로 띄워 크게 보여준다
       c.style.left = (w / 2 - cw / 2) + 'px';
     }
-    attachCardEvents(c, card);
+    if (!reused) attachCardEvents(c, card);
     handEl.appendChild(c);
+    if (!reused && !before.has(card.uid)) fresh.push(c);
   });
+
+  // 2) 새로 들어온 카드 → "뽑을" 더미에서 날아온다
+  fresh.forEach((c, k) => {
+    if (flyCardIn(c, k)) SFX.cardDraw(k);
+  });
+
+  // 3) 손에서 사라진 카드 → 어느 더미로 갔는지 찾아 날려 보낸다
+  outRecs.forEach((rec, k) => {
+    const uid = rec.node.dataset.uid;
+    let sel = '#btn-discard';
+    let sound = 'cardToss';
+    // 소각음은 엔진(exhaustCard)에서 이미 내므로 여기서는 내지 않는다
+    if (B.exhaustPile.some((c) => c.uid === uid)) { sel = '#btn-exhaust'; sound = null; }
+    else if (B.drawPile.some((c) => c.uid === uid)) sel = '#btn-draw';
+    flyCardOut(rec, sel, k);
+    if (sound && SFX[sound]) SFX[sound](k);
+  });
+
   const cz = $('#cancel-zone');
   if (cz) cz.classList.toggle('armed', !!G.selectedCard);
 }

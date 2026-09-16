@@ -526,7 +526,6 @@ export class Battle {
       const c = this.drawPile.pop();
       if (!c) break;
       this.hand.push(c);
-      this.ui.sfx && this.ui.sfx('cardDraw', i);
       this.fx('draw', { card: c });
       this.onCardDrawn(c);
     }

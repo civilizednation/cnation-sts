@@ -77,6 +77,11 @@ export const SFX = {
   cardDraw(i = 0) { hit({ dur: 0.09, vol: 0.16, freq: 2600 + i * 130, q: 0.8, sweep: 900, delay: i * 0.05 }); },
   /** 카드 선택 */
   cardPick() { tone({ freq: 880, type: 'triangle', dur: 0.07, vol: 0.2, slide: 1180 }); },
+  /** 카드를 버린 더미로 던짐 — 아래로 떨어지는 바람 소리 */
+  cardToss(i = 0) {
+    hit({ dur: 0.16, vol: 0.16, freq: 1900 - i * 90, q: 0.7, sweep: 320, delay: i * 0.05 });
+    tone({ freq: 420, type: 'triangle', dur: 0.1, vol: 0.09, slide: 170, delay: i * 0.05 + 0.02 });
+  },
   /** 카드 사용 */
   cardPlay() { hit({ dur: 0.12, vol: 0.22, freq: 1800, sweep: 600 }); },
   /** 베기 */
