@@ -79,6 +79,15 @@ html, body {
     repeating-linear-gradient(90deg, transparent 0 38px, rgba(255,255,255,.015) 38px 39px);
 }
 
+/* 타이틀 우상단 설정(톱니) 버튼 */
+.title-gear {
+  position: absolute; top: calc(10px + var(--safe-t)); right: 12px; z-index: 3;
+  width: 38px; height: 38px; padding: 6px; border-radius: 50%;
+  background: rgba(20,16,28,.75); border: 1px solid #453a5a; cursor: pointer;
+  display: grid; place-items: center;
+}
+.title-gear:active { background: #2a2238; }
+.title-gear svg { width: 100%; height: 100%; }
 .title-head { position: relative; flex: 0 0 auto; text-align: center; padding: 14px 18px 4px; }
 .game-title {
   font-family: 'Kirang Haerang', var(--font); margin: 0 0 2px; line-height: 1;
@@ -660,6 +669,48 @@ html, body {
 .modal-title { font-family: var(--font); font-size: 20px; color: var(--gold); text-align: center; margin: 4px 0; }
 .modal-text { text-align: center; color: #cfc8d8; font-size: 13.5px; line-height: 1.6; white-space: pre-line; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
+/* ---------- 설정 : 토글 / 음량 슬라이더 ---------- */
+.opt-group { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.opt-group h4 {
+  margin: 2px 0 0; font-size: 11.5px; color: #8b83a0; font-weight: 700;
+  letter-spacing: .3px; font-family: var(--font);
+}
+.opt-row {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; background: var(--panel); border: 1px solid var(--panel-edge);
+  border-radius: 10px; font-family: inherit; color: var(--text); font-size: 13.5px; text-align: left;
+}
+button.opt-row { cursor: pointer; }
+button.opt-row:active { background: #2a2238; }
+.opt-name { display: flex; align-items: baseline; gap: 7px; flex: 0 0 auto; }
+.opt-val { font-size: 11.5px; color: var(--gold); font-weight: 700; }
+/* 켜짐/꺼짐 스위치 */
+.opt-switch {
+  position: relative; width: 42px; height: 24px; flex: 0 0 auto; border-radius: 999px;
+  background: #2a2338; border: 1px solid #453a5a; transition: background .15s, border-color .15s;
+}
+.opt-switch i {
+  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #6a6278; transition: transform .15s, background .15s;
+}
+.opt-switch.on { background: #3a5a3a; border-color: #5a9a5a; }
+.opt-switch.on i { transform: translateX(18px); background: #9cffb0; }
+/* 음량 슬라이더 */
+.opt-row.vol { flex-direction: column; align-items: stretch; gap: 8px; }
+.opt-row.vol .opt-name { justify-content: space-between; }
+.opt-range {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-dim), #453a5a); outline: none; margin: 0;
+}
+.opt-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe9a8, var(--gold)); border: 1px solid #6a5420;
+  box-shadow: 0 1px 4px rgba(0,0,0,.6); cursor: pointer;
+}
+.opt-range::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%; border: 1px solid #6a5420;
+  background: radial-gradient(circle at 35% 30%, #ffe9a8, var(--gold)); cursor: pointer;
+}
 .card-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
 .choice-row {
   width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px;

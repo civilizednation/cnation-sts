@@ -2,29 +2,62 @@
 //  내장 효과음 : 외부 파일 없이 WebAudio 로 합성
 // ============================================================
 
+// ---- 설정 (효과음 · 배경음 공용, localStorage 에 보관) ----
+const PREF_KEY = 'cnation_sts_audio_v1';
+const DEFAULTS = { sfx: true, sfxVol: 0.35, bgm: true, bgmVol: 0.30 };
+let pref = { ...DEFAULTS };
+try {
+  const raw = localStorage.getItem(PREF_KEY);
+  if (raw) pref = { ...DEFAULTS, ...JSON.parse(raw) };
+} catch (e) { /* 저장소를 못 쓰면 기본값 */ }
+function savePref() {
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch (e) { /* noop */ }
+}
+/** 배경음 모듈이 설정 변화를 받아 가는 구독 창구 */
+const prefListeners = [];
+export function onAudioPrefChange(fn) { prefListeners.push(fn); }
+function notifyPref() { prefListeners.forEach((f) => { try { f(pref); } catch (e) { /* noop */ } }); }
+
 let ctx = null;
 let master = null;
-let enabled = true;
 
 function ac() {
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain();
-    master.gain.value = 0.35;
+    master.gain.value = pref.sfxVol;
     master.connect(ctx.destination);
   }
   return ctx;
 }
+/** 배경음 모듈이 같은 AudioContext 를 쓰도록 공유한다 */
+export function getCtx() { return ac(); }
+export function isAudioRunning() { return !!ctx && ctx.state === 'running'; }
 
 /** 모바일 브라우저는 사용자 제스처 이후에만 오디오 허용 */
 export function unlockAudio() {
   const c = ac();
   if (c.state === 'suspended') c.resume();
+  unlockListeners.forEach((f) => { try { f(); } catch (e) { /* noop */ } });
 }
+const unlockListeners = [];
+/** 처음 잠금이 풀렸을 때 배경음을 시작하기 위한 구독 창구 */
+export function onAudioUnlock(fn) { unlockListeners.push(fn); }
 
-export function setSfxEnabled(v) { enabled = v; }
-export function isSfxEnabled() { return enabled; }
-export function setVolume(v) { ac(); master.gain.value = v; }
+export function setSfxEnabled(v) { pref.sfx = !!v; savePref(); notifyPref(); }
+export function isSfxEnabled() { return pref.sfx; }
+export function setSfxVolume(v) { pref.sfxVol = clamp01(v); ac(); master.gain.value = pref.sfxVol; savePref(); notifyPref(); }
+export function getSfxVolume() { return pref.sfxVol; }
+
+export function setBgmEnabled(v) { pref.bgm = !!v; savePref(); notifyPref(); }
+export function isBgmEnabled() { return pref.bgm; }
+export function setBgmVolume(v) { pref.bgmVol = clamp01(v); savePref(); notifyPref(); }
+export function getBgmVolume() { return pref.bgmVol; }
+
+function clamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
+
+/** 예전 이름 (효과음 음량) */
+export function setVolume(v) { setSfxVolume(v); }
 
 /** 화이트 노이즈 버퍼(캐시) */
 let noiseBuf = null;
@@ -48,7 +81,7 @@ function env(gain, t0, a, d, peak = 1) {
 
 /** 기본 톤 */
 function tone({ freq = 440, type = 'sine', dur = 0.2, attack = 0.005, vol = 0.3, slide = null, delay = 0, detune = 0 }) {
-  if (!enabled) return;
+  if (!pref.sfx) return;
   const c = ac(); const t0 = c.currentTime + delay;
   const o = c.createOscillator(); const g = c.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t0); o.detune.value = detune;
@@ -60,7 +93,7 @@ function tone({ freq = 440, type = 'sine', dur = 0.2, attack = 0.005, vol = 0.3,
 
 /** 노이즈 기반 타격음 */
 function hit({ dur = 0.18, vol = 0.4, freq = 1200, q = 1, type = 'bandpass', delay = 0, sweep = null }) {
-  if (!enabled) return;
+  if (!pref.sfx) return;
   const c = ac(); const t0 = c.currentTime + delay;
   const s = noise(); const f = c.createBiquadFilter(); const g = c.createGain();
   f.type = type; f.frequency.setValueAtTime(freq, t0); f.Q.value = q;

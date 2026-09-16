@@ -40,11 +40,13 @@
 ## 프로젝트 개요
 
 원작 Slay the Spire 1편의 규칙을 재현한 **모바일 세로형 웹 게임**.
-빌드 도구 없는 순수 ES 모듈 + 정적 호스팅 (Vercel). 외부 이미지·음원·3D 에셋 0개.
+빌드 도구 없는 순수 ES 모듈 + 정적 호스팅 (Vercel).
+외부 이미지·3D 에셋 0개. 배경음악 mp3 15곡만 `audio/` 에 둔다 (128kbps, 약 34MB).
 
 * 카드/UI : HTML + CSS + 인라인 SVG
 * 캐릭터·몬스터·지도 : three.js 절차적 저폴리 (`vendor/three.module.min.js` 로컬 동봉)
 * 효과음 : WebAudio 합성 (`js/audio.js`)
+* 배경음악 : mp3 15곡 스트리밍 + 크로스페이드 (`js/bgm.js`)
 
 ## 구조
 
@@ -53,7 +55,9 @@ index.html                 진입점 (importmap + 화면 골격)
 css/style.css              모바일 세로형 레이아웃 / 카드 스타일
 js/version.js              ★ 버전 (수정 요청 시 여기부터 올린다)
 js/main.js                 컨트롤러 : 화면 전환, 전투 UI, 보상/상점/이벤트/모닥불
-js/audio.js                합성 효과음
+js/audio.js                합성 효과음 + 소리 설정(효과음·배경음 on/off, 음량) 저장
+js/bgm.js                  배경음악 : 화면별 곡 지정 · 크로스페이드 · 전투곡 랜덤
+audio/                     배경음악 mp3 15곡 (128kbps)
 js/data/
   carddb.js                Card 클래스 / 레지스트리
   cards.js                 카드 인덱스 (모든 카드 파일을 여기서 import)

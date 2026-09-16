@@ -14,13 +14,15 @@ import { POTIONS } from './data/potions.js';
 import { EVENTS, pickEvent } from './data/events.js';
 import { CHARACTERS, CHAR_LIST, charOf } from './data/characters.js';
 import { rollNeowOptions, NEOW_SECRET } from './data/neow.js';
+import { BGM } from './bgm.js';
 import { STANCE_KR } from './engine/battle.js';
 import { MONSTERS } from './data/monsters.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
 import * as I3 from './three/items3d.js';
 import * as T3 from './three/title3d.js';
-import { SFX, unlockAudio, setSfxEnabled, isSfxEnabled } from './audio.js';
+import { SFX, unlockAudio, setSfxEnabled, isSfxEnabled, setSfxVolume, getSfxVolume,
+  setBgmEnabled, isBgmEnabled, setBgmVolume, getBgmVolume } from './audio.js';
 import * as S3 from './three/scene3d.js';
 import * as M3 from './three/map3d.js';
 
@@ -45,6 +47,7 @@ window.__rewards = (rw, done) => showRewards(rw, done || (() => goMap()));  // �
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex', 'scr-modal'];
 function showScreen(id) {
   if (id !== 'scr-modal') clearModal();
+  if (id === 'scr-title') BGM.play('title');
   SCREENS.forEach((s) => { const e = $('#' + s); if (e) e.hidden = s !== id; });
   if (id === 'scr-title') requestAnimationFrame(() => { try { T3.resizeTitle(); } catch (e) { /* noop */ } });
 }
@@ -160,6 +163,10 @@ function modalText(text) { return el('p', { class: 'modal-text', text }); }
 // ============================================================
 function initTitle() {
   startTitleScene();
+  BGM.play('title');
+  // 모바일은 첫 사용자 동작 전에는 소리를 못 낸다 — 타이틀 아무 곳이나 누르면 잠금을 푼다
+  const kick = () => { unlockAudio(); document.removeEventListener('pointerdown', kick, true); };
+  document.addEventListener('pointerdown', kick, true);
   const vb = $('#version-badge');
   if (vb) vb.textContent = `Version ${VERSION}`;
   $('#link-history').addEventListener('click', (e) => { e.preventDefault(); SFX.tap(); showHistory(); });
@@ -179,6 +186,11 @@ function initTitle() {
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
   $('#btn-codex').addEventListener('click', () => { unlockAudio(); SFX.tap(); showCodex('card', 'red'); });
+  const gear = $('#btn-settings');
+  if (gear) {
+    gear.innerHTML = svgIcon('gear', { size: 22, color: '#bdb4cf' });
+    gear.addEventListener('click', () => { unlockAudio(); SFX.tap(); showSettings(); });
+  }
   if (!localStorage.getItem('cnation_sts_save_v1')) $('#btn-continue').disabled = true;
 }
 
@@ -324,6 +336,7 @@ const HELP_SECTIONS = [
     ['위쪽 2행', '지금까지 얻은 유물이 왼쪽부터 나열됩니다.'],
     ['선택 화면', '보상·모닥불·상점·이벤트 화면 위쪽에는 항상 내 체력·골드·남은 물약 칸이 표시되어, 무엇을 고를지 바로 판단할 수 있습니다.'],
     ['메뉴 ☰', '덱 보기 · 유물 목록 · 백과사전 · 게임 방법 · 설정으로 들어갑니다.'],
+    ['소리 설정', '타이틀 화면 <b>오른쪽 위 톱니 버튼</b>, 게임 중에는 메뉴 ☰ → 설정에서 <b>배경음악과 효과음을 각각 켜고 끄거나 음량을 조절</b>할 수 있습니다. 설정은 저장됩니다.'],
   ]],
   ['지도', [
     ['이동', '위아래로 밀어 둘러보고, 금색 화살표가 가리키는 <b>빛나는 방</b>을 탭해 이동합니다.'],
@@ -773,6 +786,7 @@ document.addEventListener('pointerdown', (e) => {
 // ============================================================
 function goMap() {
   G.battle = null;
+  BGM.play('map');
   stopOverlayLoop();
   showScreen('scr-map');
   renderTopbar('#battle-top');
@@ -855,6 +869,7 @@ function enterRoom(pos) {
 // ============================================================
 function startBattle(encounter) {
   showScreen('scr-battle');
+  BGM.playBattle(encounter.kind, G.run.act);
   G.logLines = [];
   const canvas = $('#three-canvas');
   if (!G.sceneReady) { S3.initScene(canvas); G.sceneReady = true; }
@@ -1837,6 +1852,7 @@ function endBattle(B) {
   stopOverlayLoop();
   const run = G.run;
   if (!B.won) { gameOver(); return; }
+  BGM.play('map');   // 보상 화면부터 지도 음악으로 돌아온다
   SFX.victory();
   const kind = B.encounter.kind;
   run.stats.kills += B.enemies.length;
@@ -1986,6 +2002,7 @@ function nextAct() {
 // ============================================================
 function showRest() {
   const run = G.run;
+  BGM.play('camp');
   showScreen('scr-map');
   renderMap();
   const opts = [];
@@ -2078,6 +2095,7 @@ function showTreasure() {
 // ============================================================
 function showShop() {
   const run = G.run;
+  BGM.play('shop');
   showScreen('scr-map');
   renderMap();
   run.relicHook('onEnterShop', run);
@@ -2200,6 +2218,7 @@ function showShop() {
 // ============================================================
 function showEvent() {
   const run = G.run;
+  BGM.play('camp');
   showScreen('scr-map');
   renderMap();
   const ev = pickEvent(run);
@@ -2281,26 +2300,61 @@ function showDeck() {
   });
 }
 
+/** 켜짐/꺼짐 토글 한 줄 */
+function toggleRow(label, get, set) {
+  const row = el('button', { class: 'opt-row' });
+  const paint = () => {
+    row.innerHTML = `<span class="opt-name">${label}</span>`
+      + `<span class="opt-switch${get() ? ' on' : ''}"><i></i></span>`;
+  };
+  paint();
+  row.addEventListener('click', () => { set(!get()); paint(); SFX.tap(); });
+  return row;
+}
+
+/** 음량 슬라이더 한 줄 */
+function volumeRow(label, get, set, onRelease) {
+  const row = el('div', { class: 'opt-row vol' });
+  const val = el('span', { class: 'opt-val', text: Math.round(get() * 100) + '%' });
+  const input = el('input', { class: 'opt-range', type: 'range', min: '0', max: '100', step: '5' });
+  input.value = String(Math.round(get() * 100));
+  input.addEventListener('input', () => {
+    set(Number(input.value) / 100);
+    val.textContent = input.value + '%';
+  });
+  // 끌기를 마쳤을 때만 미리듣기 (끄는 내내 소리가 나면 시끄럽다)
+  ['change', 'pointerup'].forEach((ev) => input.addEventListener(ev, () => { if (onRelease) onRelease(); }));
+  row.append(el('span', { class: 'opt-name' }, label, val), input);
+  return row;
+}
+
 function showSettings() {
   openModal((box) => {
-    box.append(modalTitle('설정'));
-    const sfxBtn = el('button', { class: 'btn', text: `효과음 : ${isSfxEnabled() ? '켜짐' : '꺼짐'}` });
-    sfxBtn.addEventListener('click', () => {
-      setSfxEnabled(!isSfxEnabled());
-      sfxBtn.textContent = `효과음 : ${isSfxEnabled() ? '켜짐' : '꺼짐'}`;
-      if (isSfxEnabled()) { unlockAudio(); SFX.tap(); }
-    });
     box.append(
-      sfxBtn,
-      el('button', { class: 'btn ghost', text: '게임 방법', onclick: () => { closeModal(); showHelp(); } }),
-      el('button', { class: 'btn ghost', text: '유물 목록', onclick: () => { closeModal(); showRelicList(); } }),
-      el('button', { class: 'btn danger', text: '런 포기 (타이틀로)', onclick: () => {
-        if (!confirm('현재 런을 포기하고 타이틀로 돌아갈까요?')) return;
-        clearSave(); G.run = null; G.battle = null; stopOverlayLoop(); closeModal(); showScreen('scr-title');
-        $('#btn-continue').disabled = true;
-      } }),
-      el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '닫기', onclick: () => closeModal() })),
+      modalTitle('설정'),
+      el('div', { class: 'opt-group' },
+        el('h4', { text: '소리' }),
+        toggleRow('배경음악', isBgmEnabled, (v) => { unlockAudio(); setBgmEnabled(v); }),
+        volumeRow('배경음 음량', getBgmVolume, setBgmVolume),
+        toggleRow('효과음', isSfxEnabled, (v) => { setSfxEnabled(v); if (v) unlockAudio(); }),
+        volumeRow('효과음 음량', getSfxVolume, setSfxVolume, () => SFX.tap()),
+      ),
     );
+    // 런 중에만 보이는 항목 (타이틀에서 연 설정에는 나오지 않는다)
+    const inRun = !!G.run && $('#scr-title').hidden;
+    if (inRun) {
+      box.append(
+        el('button', { class: 'btn ghost', text: '게임 방법', onclick: () => { closeModal(); showHelp(); } }),
+        el('button', { class: 'btn ghost', text: '유물 목록', onclick: () => { closeModal(); showRelicList(); } }),
+        el('button', { class: 'btn danger', text: '런 포기 (타이틀로)', onclick: () => {
+          if (!confirm('현재 런을 포기하고 타이틀로 돌아갈까요?')) return;
+          clearSave(); G.run = null; G.battle = null; stopOverlayLoop(); closeModal(); showScreen('scr-title');
+          $('#btn-continue').disabled = true;
+        } }),
+      );
+    }
+    box.append(el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
   });
 }
 
@@ -2322,6 +2376,7 @@ function showRelicList() {
 
 function gameOver() {
   const run = G.run;
+  BGM.play('fail', 'fail');
   SFX.defeat();
   clearSave();
   stopOverlayLoop();
@@ -2332,13 +2387,14 @@ function gameOver() {
       modalText(`도달 층수 : ${run.floor}층 (${run.act}막)\n처치한 적 : ${run.stats.kills}\n엘리트 처치 : ${run.stats.elites}\n보스 처치 : ${run.stats.bosses}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '다시 도전', onclick: () => { closeModal(); newGame(); } }),
-        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); showScreen('scr-title'); $('#btn-continue').disabled = true; } })),
+        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); $('#btn-continue').disabled = true; } })),
     );
   });
 }
 
 function victory() {
   const run = G.run;
+  BGM.play('victory', 'victory');
   SFX.victory();
   clearSave();
   stopOverlayLoop();
@@ -2349,7 +2405,7 @@ function victory() {
       modalText(`50층의 최종 보스를 쓰러뜨렸습니다!\n\n남은 체력 : ${run.player.hp}/${run.player.maxHp}\n처치한 적 : ${run.stats.kills}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '새 게임', onclick: () => { closeModal(); newGame(); } }),
-        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); showScreen('scr-title'); $('#btn-continue').disabled = true; } })),
+        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); $('#btn-continue').disabled = true; } })),
     );
   });
 }
@@ -2390,6 +2446,7 @@ function bind() {
   addEventListener('visibilitychange', () => { if (document.hidden && G.run) saveRun(G.run); });
 }
 
+BGM.init();
 initTitle();
 bind();
 initCardInspect();
