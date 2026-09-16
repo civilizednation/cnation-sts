@@ -207,7 +207,9 @@ function showHistory() {
   const body = $('#history-body');
   body.innerHTML = '';
   CHANGELOG.forEach((rel, i) => {
-    const sec = el('section', { class: 'rel' + (i === 0 ? ' latest' : '') });
+    // 두 번째 자리(minor)가 올라간 큰 변화는 제목을 강조한다 (1.1.0 / 1.2.0 …)
+    const big = /^\d+\.\d+\.0$/.test(String(rel.v));
+    const sec = el('section', { class: 'rel' + (i === 0 ? ' latest' : '') + (big ? ' big' : '') });
     sec.append(
       el('div', { class: 'rel-head' },
         el('span', { class: 'rel-ver', text: `v${rel.v}` }),

@@ -153,6 +153,9 @@ html, body {
 .rel-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; margin-bottom: 6px; }
 .rel-ver { font-size: 14px; font-weight: 700; color: var(--gold); font-family: var(--font); }
 .rel-note { font-size: 11.5px; color: #9a92a8; }
+/* 두 번째 자리가 올라간 큰 변화 — 제목을 굵고 밝게 */
+.rel.big .rel-note { font-size: 13.5px; font-weight: 700; color: #ffffff; letter-spacing: -.2px; }
+.rel.big .rel-ver { font-size: 15px; }
 .rel-now {
   font-size: 10px; color: #0d0a12; background: var(--gold);
   border-radius: 999px; padding: 1px 7px; font-weight: 700;
