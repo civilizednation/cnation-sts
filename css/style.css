@@ -436,6 +436,22 @@ html, body {
 /* 날아오는 중인 카드는 다른 카드 위로 */
 .card.flying { z-index: 70 !important; }
 
+/* 게임 방법 — 항목이 많아 왼쪽 정렬 목록으로 */
+.help-body {
+  width: 100%; text-align: left; display: flex; flex-direction: column; gap: 14px;
+  max-height: 62vh; overflow-y: auto; padding: 0 4px 8px 0;
+}
+/* 내용이 이어진다는 걸 알 수 있게 버튼 줄과 선으로 구분 */
+.help-body + .modal-actions { border-top: 1px solid #2f2744; padding-top: 11px; }
+.help-sec h4 {
+  margin: 0 0 6px; font-size: 11px; font-weight: 700; color: var(--gold);
+  letter-spacing: 1.2px; font-family: var(--font);
+}
+.help-sec ul { margin: 0; padding-left: 15px; display: flex; flex-direction: column; gap: 6px; }
+.help-sec li { font-size: 12.4px; line-height: 1.58; color: #cfc8d8; }
+.help-sec li::marker { color: #6a5f85; }
+.help-sec li b { color: #e6dcff; font-weight: 700; }
+
 /* 카드 상세 설명 */
 .cd-card { display: flex; justify-content: center; width: 100%; }
 .cd-meta { font-size: 11.5px; color: #9a92a8; text-align: center; letter-spacing: .2px; }
