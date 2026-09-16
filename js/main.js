@@ -332,6 +332,10 @@ function goldHTML(px = 26) {
   const u = I3.goldIcon3D();
   return u ? imgTag(u, px) : svgIcon('ring', { size: px, color: '#e8c34a' });
 }
+function cardHTML(px = 26) {
+  const u = I3.cardIcon3D();
+  return u ? imgTag(u, px) : svgIcon('book', { size: px, color: '#8ad0ff' });
+}
 
 /** 물약 3D 마크 */
 function potionMark(def, px = 28) {
@@ -1258,7 +1262,7 @@ function rewardRow(rw, idx, taken, rebuild) {
     row.addEventListener('click', async () => { await gainRelic(rw.id); take(); });
 
   } else if (rw.type === 'card') {
-    row.innerHTML = `<div class="relic-big" style="border-color:#8ad0ff">${svgIcon('book', { size: 22, color: '#8ad0ff' })}</div><span>카드 보상 (${rw.cards.length}장 중 택 1)</span>`;
+    row.innerHTML = `<div class="relic-big" style="border-color:#8ad0ff">${cardHTML(30)}</div><span>카드 보상 (${rw.cards.length}장 중 택 1)</span>`;
     row.addEventListener('click', () => {
       SFX.tap();
       openModal((b2) => {

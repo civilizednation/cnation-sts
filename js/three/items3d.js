@@ -437,14 +437,87 @@ export function goldIcon3D() {
   let url = null;
   try {
     const g = new THREE.Group();
-    const goldM = M(0xf5cf5a, { metal: 0.95, rough: 0.16, emissive: 0x8a6414, ei: 0.7 });
-    const edgeM = M(0xffeeae, { metal: 0.9, rough: 0.12, emissive: 0xc09a2a, ei: 0.9 });
-    [[-0.1, -0.3, -0.06], [0.08, -0.06, 0.04], [0, 0.2, 0]].forEach(([x, y, z], i) => {
-      const c = mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.16, 16), i === 2 ? edgeM : goldM, x, y, z);
-      c.rotation.set(Math.PI / 2.3, 0, i * 0.2);
+    // 금속성을 너무 높이면 환경맵이 없어 어둡게 죽는다 → 중간 금속감 + 자체 발광으로 금빛을 낸다
+    const edge = M(0xd9a234, { metal: 0.5, rough: 0.34, emissive: 0x5a4008, ei: 0.7 });
+    const face = M(0xffdf72, { metal: 0.42, rough: 0.26, emissive: 0x8a6a16, ei: 0.85 });
+    const stamp = M(0xfff8d8, { metal: 0.3, rough: 0.18, emissive: 0xd8b040, ei: 1.35 });
+
+    /** 앞면·테두리가 구분되는 금화 한 닢 */
+    const coin = (r, thick) => {
+      const c = new THREE.Group();
+      c.add(mesh(new THREE.CylinderGeometry(r, r, thick, 26), edge));            // 두꺼운 테두리
+      [1, -1].forEach((sd) => {                                                  // 살짝 튀어나온 앞뒷면
+        c.add(mesh(new THREE.CylinderGeometry(r * 0.84, r * 0.84, thick * 1.14, 26), face, 0, sd * thick * 0.08, 0));
+      });
+      const em = mesh(new THREE.OctahedronGeometry(r * 0.34, 0), stamp, 0, thick * 0.62, 0);
+      em.scale.set(1, 0.4, 1);
+      c.add(em);                                                                 // 가운데 각인
+      for (let i = 0; i < 10; i++) {                                             // 둘레 돋을새김
+        const a = (i / 10) * Math.PI * 2;
+        c.add(mesh(new THREE.SphereGeometry(r * 0.05, 6, 5), stamp,
+          Math.cos(a) * r * 0.64, thick * 0.6, Math.sin(a) * r * 0.64));
+      }
+      c.rotation.x = Math.PI / 2;    // 앞면이 카메라를 보게 세운다
+      return c;
+    };
+
+    // 뒤쪽 두 닢은 좌우로 크게 비켜 두어 원반 윤곽이 각각 드러나게 한다
+    const back1 = coin(0.44, 0.13);
+    back1.position.set(-0.62, -0.34, -0.3);
+    back1.rotation.z = -0.5;
+    g.add(back1);
+    const back2 = coin(0.44, 0.13);
+    back2.position.set(0.62, -0.36, -0.3);
+    back2.rotation.z = 0.44;
+    g.add(back2);
+    const front = coin(0.6, 0.17);
+    front.position.set(0, 0.12, 0.3);
+    g.add(front);
+
+    url = bake(g);
+  } catch (e) { url = null; }
+  cache.set(k, url);
+  return url;
+}
+
+/** 카드 보상 아이콘 : 부채꼴로 펼친 카드 3장 */
+export function cardIcon3D() {
+  if (!init()) return null;
+  const k = 'c';
+  if (cache.has(k)) return cache.get(k);
+  let url = null;
+  try {
+    const g = new THREE.Group();
+    const backM = M(0x3b6ea8, { metal: 0.3, rough: 0.5, emissive: 0x15314f, ei: 0.6 });
+    const faceM = M(0xf2ecdc, { metal: 0.05, rough: 0.7 });
+    const trimM = M(0x8ad0ff, { metal: 0.6, rough: 0.25, emissive: 0x3a8ad0, ei: 1.0 });
+
+    const card = (w, h, mat) => {
+      const c = new THREE.Group();
+      c.add(mesh(new THREE.BoxGeometry(w, h, 0.045), mat));
+      return c;
+    };
+    // 뒤쪽 두 장은 카드 뒷면, 앞의 한 장은 앞면 + 문양
+    const angles = [0.42, -0.4, 0.02];
+    const offs = [[-0.3, -0.06, -0.09], [0.3, -0.08, -0.05], [0, 0.06, 0.06]];
+    angles.forEach((a, i) => {
+      const isFront = i === 2;
+      const c = card(0.78, 1.08, isFront ? faceM : backM);
+      if (isFront) {
+        // 앞면 테두리 + 가운데 마름모 문양
+        c.add(mesh(new THREE.BoxGeometry(0.84, 1.14, 0.03), trimM, 0, 0, -0.02));
+        const dia = mesh(new THREE.OctahedronGeometry(0.2, 0), trimM, 0, 0.06, 0.04);
+        dia.scale.set(1, 1.25, 0.35);
+        c.add(dia);
+        c.add(mesh(new THREE.BoxGeometry(0.44, 0.05, 0.03), trimM, 0, -0.32, 0.04));
+        c.add(mesh(new THREE.BoxGeometry(0.34, 0.05, 0.03), trimM, 0, -0.42, 0.04));
+      } else {
+        c.add(mesh(new THREE.BoxGeometry(0.56, 0.84, 0.03), trimM, 0, 0, 0.026));
+      }
+      c.position.set(offs[i][0], offs[i][1], offs[i][2]);
+      c.rotation.z = a;
       g.add(c);
     });
-    g.add(mesh(new THREE.TorusGeometry(0.33, 0.05, 6, 16), edgeM, 0, 0.26, 0.1));
     url = bake(g);
   } catch (e) { url = null; }
   cache.set(k, url);
