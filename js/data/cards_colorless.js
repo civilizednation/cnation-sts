@@ -25,7 +25,7 @@ def({ id: 'bandageUp', name: '붕대 감기', en: 'Bandage Up', type: S, rarity:
   text: D((c) => `체력을 ${c.v('mag')} 회복합니다.`),
   play: (x) => x.B.heal(x.p, x.c.v('mag')) });
 
-def({ id: 'blind', name: '실명', en: 'Blind', type: S, rarity: RARITY.UNCOMMON, color: CL, cost: 0, target: E,
+def({ id: 'blind', name: '실명', en: 'Blind', type: S, rarity: RARITY.UNCOMMON, color: CL, cost: 0, target: E, targetU: ALL,
   mag: 2,
   text: D((c) => c.upgraded ? `모든 적에게 약화를 ${c.v('mag')} 부여합니다.` : `적에게 약화를 ${c.v('mag')} 부여합니다.`),
   play: (x) => {
@@ -129,7 +129,7 @@ def({ id: 'swiftStrike', name: '재빠른 타격', en: 'Swift Strike', type: A, 
   text: D((c) => `피해를 ${c.v('dmg')} 줍니다.`),
   play: (x) => x.B.attack(x, x.c.v('dmg')) });
 
-def({ id: 'trip', name: '걸어 넘어뜨리기', en: 'Trip', type: S, rarity: RARITY.UNCOMMON, color: CL, cost: 0, target: E,
+def({ id: 'trip', name: '걸어 넘어뜨리기', en: 'Trip', type: S, rarity: RARITY.UNCOMMON, color: CL, cost: 0, target: E, targetU: ALL,
   mag: 2,
   text: D((c) => c.upgraded ? `모든 적에게 취약을 ${c.v('mag')} 부여합니다.` : `적에게 취약을 ${c.v('mag')} 부여합니다.`),
   play: (x) => {

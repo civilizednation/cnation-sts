@@ -65,7 +65,11 @@ export class Card {
   get type() { return this.def.type; }
   get color() { return this.def.color; }
   get rarity() { return this.def.rarity; }
-  get target() { return this.def.target || TARGET.NONE; }
+  /** 강화하면 대상 범위가 달라지는 카드가 있다 (실명+ / 걸어 넘어뜨리기+ → 적 전체) */
+  get target() {
+    if (this.upgraded && this.def.targetU) return this.def.targetU;
+    return this.def.target || TARGET.NONE;
+  }
   get exhaust() { return !!(this.upgraded && this.def.exhaustU !== undefined ? this.def.exhaustU : this.def.exhaust); }
   get ethereal() { return !!(this.upgraded && this.def.etherealU !== undefined ? this.def.etherealU : this.def.ethereal); }
   get innate() { return !!(this.upgraded && this.def.innateU !== undefined ? this.def.innateU : this.def.innate); }
