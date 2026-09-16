@@ -184,6 +184,17 @@ function costOrbSVG(card) {
 }
 
 /** 카드 DOM 생성 */
+/**
+ * 설명이 길면 글자를 조금 줄여 글상자 안에 최대한 담는다.
+ * (원작도 설명이 긴 카드는 글씨가 작다)
+ */
+function descLenClass(text) {
+  const n = String(text).replace(/<[^>]*>/g, '').length;
+  if (n >= 48) return ' d-xlong';
+  if (n >= 39) return ' d-long';
+  return '';
+}
+
 export function renderCard(card, opts = {}) {
   const el = document.createElement('div');
   const th = TYPE_THEME[card.type] || TYPE_THEME.skill;
@@ -211,7 +222,7 @@ export function renderCard(card, opts = {}) {
       <div class="card-art">${cardArtSVG(card)}</div>
       <div class="card-namebar"><span class="card-name">${card.name}</span></div>
       ${costOrbSVG(card)}
-      <div class="card-body"><div class="card-desc">${decorate(descText, baseText)}</div></div>
+      <div class="card-body"><div class="card-desc${descLenClass(descText)}">${decorate(descText, baseText)}</div></div>
       <div class="card-footer"><span class="card-type">${TYPE_KR[card.type] || ''}</span>
         <span class="card-rar" title="${RARITY_KR[card.rarity] || ''}"></span></div>
     </div>`;
