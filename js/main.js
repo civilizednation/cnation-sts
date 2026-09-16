@@ -374,6 +374,83 @@ function showGameMenu() {
   });
 }
 
+/** 적 의도(다음 행동) 종류별 설명 */
+const INTENT_DESC = {
+  attack: ['공격', '다음 턴에 당신을 공격합니다.'],
+  attackDefend: ['공격 + 방어', '당신을 공격하면서 자신도 방어도를 얻습니다.'],
+  attackDebuff: ['공격 + 약화', '당신을 공격하면서 불리한 상태이상을 함께 겁니다.'],
+  attackBuff: ['공격 + 강화', '당신을 공격하면서 자신을 더 강하게 만듭니다.'],
+  defend: ['방어', '방어도를 얻어 당신의 공격을 막습니다. 이번 턴엔 피해를 주지 않습니다.'],
+  defendBuff: ['방어 + 강화', '방어도를 얻고 자신을 강화합니다.'],
+  defendDebuff: ['방어 + 약화', '방어도를 얻고 당신에게 불리한 상태이상을 겁니다.'],
+  buff: ['강화', '자신이나 아군을 강하게 만듭니다. 이번 턴엔 피해를 주지 않습니다.'],
+  debuff: ['약화', '당신에게 불리한 상태이상을 겁니다. 이번 턴엔 피해를 주지 않습니다.'],
+  strongDebuff: ['강한 약화', '당신에게 특히 위험한 상태이상을 겁니다. 이번 턴엔 피해를 주지 않습니다.'],
+  magic: ['주술', '피해 외의 특수한 효과를 사용합니다.'],
+  unknown: ['알 수 없음', '무엇을 할지 예측할 수 없습니다.'],
+  sleep: ['수면', '자고 있어 아무것도 하지 않습니다. 공격을 받으면 깨어납니다.'],
+  stun: ['기절', '이번 턴을 아무것도 하지 못하고 넘깁니다.'],
+  escape: ['도주', '전투에서 달아나려 합니다.'],
+};
+
+/**
+ * 이 행동이 실제로 무엇을 거는지 몬스터 정의에서 읽어 낸다.
+ * (moves 의 run 은 우리가 직접 쓴 정적 코드라 형태가 일정하다)
+ */
+function intentEffects(actor) {
+  const mv = actor.def && actor.def.moves && actor.def.moves[actor.intent.move];
+  if (!mv || !mv.run) return [];
+  const src = String(mv.run);
+  const out = [];
+
+  const re = /addPower\(\s*([A-Za-z.]+)\s*,\s*'(\w+)'\s*(?:,\s*([^,)]+))?/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const toPlayer = /player/i.test(m[1]);
+    const nm = powerName(m[2]) || m[2];
+    let amt = null;
+    if (m[3]) { const num = m[3].match(/-?\d+/); if (num) amt = Number(num[0]); }
+    out.push(`${toPlayer ? '나에게' : '자신에게'} ${nm}${amt !== null ? ` ${amt}` : ''}`);
+  }
+
+  const counts = {};
+  const re2 = /mk\('(\w+)'\)/g;
+  while ((m = re2.exec(src))) counts[m[1]] = (counts[m[1]] || 0) + 1;
+  Object.entries(counts).forEach(([id, n]) => {
+    const d = CARD_DEFS[id];
+    out.push(`내 덱에 ${d ? d.name : id}${n > 1 ? ` ${n}장` : ''} 넣음`);
+  });
+
+  if (/splitEnemy/.test(src)) out.push('체력을 나눠 둘로 분열');
+  if (/heal\(/.test(src)) out.push('자신의 체력 회복');
+  if (/summon|addEnemy/.test(src)) out.push('새로운 적을 부름');
+  return out;
+}
+
+/** 의도 배지를 눌렀을 때 보여 줄 제목/설명 */
+function intentTooltip(actor) {
+  const B = G.battle;
+  const it = actor && actor.intent;
+  if (!B || !it) return null;
+  const [kind, desc] = INTENT_DESC[it.type] || INTENT_DESC.unknown;
+  const lines = [desc];
+
+  const dmg = B.intentDamage(actor);
+  if (dmg !== null && dmg !== undefined) {
+    lines.push(it.hits > 1
+      ? `예상 피해 : ${dmg} × ${it.hits}회 (합계 ${dmg * it.hits})`
+      : `예상 피해 : ${dmg}`);
+  }
+  if (it.blk) lines.push(`얻는 방어도 : ${it.blk}`);
+  const fx = intentEffects(actor);
+  if (fx.length) lines.push(`효과 : ${fx.join(', ')}`);
+  if (dmg !== null && dmg !== undefined) {
+    lines.push('※ 힘·약화·취약이 반영된 현재 예상치입니다.');
+  }
+  const title = it.name ? `${kind} · ${it.name}` : kind;
+  return { title, text: lines.join('\n') };
+}
+
 let tipTimer = null;
 function showTooltip(ev, title, text) {
   const tip = $('#tooltip');
@@ -389,7 +466,7 @@ function showTooltip(ev, title, text) {
 }
 document.addEventListener('pointerdown', (e) => {
   const tip = $('#tooltip');
-  if (!tip.hidden && !e.target.closest('.relic, .pw, .potion-slot')) tip.hidden = true;
+  if (!tip.hidden && !e.target.closest('.relic, .pw, .potion-slot, .intent')) tip.hidden = true;
 }, true);
 
 // ============================================================
@@ -652,6 +729,18 @@ function renderUnits() {
     });
     if (pw.children.length) u.appendChild(pw);
     if (!isPlayer) {
+      // 의도 배지를 누르면 그 행동이 무엇인지 설명해 준다
+      const badge = u.querySelector('.intent');
+      if (badge) {
+        badge.classList.add('tappable');
+        badge.addEventListener('click', (ev) => {
+          if (G.targeting || G.pendingPotion !== null) return;   // 대상 지정 중에는 선택을 우선
+          ev.stopPropagation();
+          SFX.tap();
+          const info = intentTooltip(actor);
+          if (info) showTooltip(ev, `${actor.name} — ${info.title}`, info.text);
+        });
+      }
       u.addEventListener('click', () => onTargetTap(actor));
     }
     return u;

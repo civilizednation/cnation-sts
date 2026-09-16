@@ -309,10 +309,18 @@ html, body {
   border: 1.5px solid #a8d8ff; border-radius: 50%; text-shadow: 0 1px 2px #000;
 }
 .intent {
-  display: flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 11px;
+  display: flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 11px;
   background: rgba(12,10,18,.86); border: 1px solid #4a3a5a; font-size: 12px; font-weight: 700;
   text-shadow: 0 1px 2px #000; white-space: nowrap;
 }
+/* 눌러서 설명을 볼 수 있다는 힌트 (작은 물음표) */
+.intent.tappable { cursor: pointer; padding-right: 6px; -webkit-tap-highlight-color: transparent; }
+.intent.tappable::after {
+  content: '?'; margin-left: 2px; font-size: 9px; font-weight: 700; line-height: 1;
+  color: #0e0b14; background: #cdbfe0; border-radius: 50%;
+  width: 12px; height: 12px; display: grid; place-items: center; opacity: .8;
+}
+.intent.tappable:active { background: rgba(50,40,70,.95); }
 .intent svg { width: 17px; height: 17px; }
 .powers { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; max-width: 116px; }
 .pw {
