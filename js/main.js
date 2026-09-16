@@ -1015,11 +1015,13 @@ function renderUnits() {
       html += `<div class="intent" style="border-color:${INTENT_COLOR[it.type] || '#888'}">${intentIcon(it.type)}<span>${label}</span></div>`;
     }
     html += `<div class="unit-name">${actor.name}</div>`;
-    html += `<div class="unit-hp${isPlayer ? ' me' : ''}" style="width:${barW}px"><i style="width:${pct}%"></i><b>${Math.max(0, actor.hp)}/${actor.maxHp}</b></div>`;
+    // 방어도 배지는 체력바를 감싼 줄 안에 넣어야 의도·이름 유무와 상관없이
+    // 항상 체력바 왼쪽 끝에 붙는다
+    html += `<div class="unit-hp-row" style="width:${barW}px">`
+      + `<div class="unit-hp${isPlayer ? ' me' : ''}"><i style="width:${pct}%"></i><b>${Math.max(0, actor.hp)}/${actor.maxHp}</b></div>`
+      + (actor.block > 0 ? `<div class="unit-block">${actor.block}</div>` : '')
+      + `</div>`;
     u.innerHTML = html;
-    if (actor.block > 0) {
-      u.appendChild(el('div', { class: 'unit-block', text: String(actor.block) }));
-    }
     if (isPlayer && B.stance && B.stance !== 'neutral') {
       u.appendChild(el('div', { class: 'stance-badge s-' + B.stance, text: STANCE_KR[B.stance] }));
     }
@@ -1127,7 +1129,9 @@ function positionUnits() {
     const h = u.offsetHeight || 62;
     const halfW = Math.min(u.offsetWidth || 120, stage.width - 12) / 2;
     const minTop = Math.min(h + 8, stage.height - 40);
-    u.style.left = clamp(p.x, halfW + 6, Math.max(halfW + 6, stage.width - halfW - 6)) + 'px';
+    // 방어도 배지는 체력바 왼쪽으로 8px 삐져나오므로 그만큼 왼쪽 여유를 더 둔다
+    const padL = u.querySelector('.unit-block') ? 16 : 6;
+    u.style.left = clamp(p.x, halfW + padL, Math.max(halfW + padL, stage.width - halfW - 6)) + 'px';
     u.style.top = clamp(p.y, minTop, stage.height - 40) + 'px';
   });
 }

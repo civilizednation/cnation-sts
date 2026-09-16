@@ -308,8 +308,12 @@ html, body {
 .unit-hp.me > i { background: linear-gradient(#5ce39a, #1f9e63); }
 .unit-hp > i { display: block; height: 100%; background: linear-gradient(#d84f3a, #8a1f14); transition: width .25s; }
 .unit-hp > b { position: absolute; inset: 0; font-size: 10px; line-height: 1; display: flex; align-items: center; justify-content: center; text-shadow: 0 1px 2px #000; font-weight: 700; }
+/* 체력바 한 줄 — 방어도 배지의 기준 상자 */
+.unit-hp-row { position: relative; flex: 0 0 auto; }
 .unit-block {
-  position: absolute; left: -8px; top: 16px; width: 26px; height: 26px;
+  /* 체력바 왼쪽 끝에 세로 중앙 정렬 */
+  position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px;
   display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #dff0ff;
   background: radial-gradient(circle at 35% 30%, #6ab4e8, #1d4a72);
   border: 1.5px solid #a8d8ff; border-radius: 50%; text-shadow: 0 1px 2px #000;
