@@ -197,7 +197,9 @@ export const BGM = {
     if (!ready || cur < 0) return { key: curKey, playing: false, src: null, pending };
     const el = deck[cur].el;
     return { key: curKey, playing: !el.paused, src: el.getAttribute('src'), loop: el.loop,
-      gain: +deck[cur].gain.gain.value.toFixed(3), pending };
+      gain: +deck[cur].gain.gain.value.toFixed(3), pending,
+      time: +el.currentTime.toFixed(2), dur: el.duration || 0,
+      buffered: el.buffered.length ? +el.buffered.end(el.buffered.length - 1).toFixed(1) : 0 };
   },
 };
 
