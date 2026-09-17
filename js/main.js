@@ -212,7 +212,7 @@ function initTitle() {
   $('#btn-stats-close').addEventListener('click', () => { SFX.tap(); showAccount(); });
   const gear = $('#btn-settings-title');
   if (gear) {
-    gear.innerHTML = svgIcon('gear', { size: 22, color: '#bdb4cf' });
+    gear.innerHTML = svgIcon('cog', { size: 24, color: '#d3cae2' });
     gear.addEventListener('click', () => { unlockAudio(); SFX.tap(); showSettings(); });
   }
 }
@@ -911,11 +911,11 @@ function codexChars(body) {
     const c = CHARACTERS[id];
     const card = el('div', { class: 'cx-char' });
     card.style.setProperty('--acc', c.accent);
-    const url = I3.characterIcon3D(id, c.model);
+    const url = I3.characterPortrait3D(id, c.model);
     const deck = c.deck.map(([cid, n]) => `${CARD_DEFS[cid] ? CARD_DEFS[cid].name : cid}${n > 1 ? ` ×${n}` : ''}`).join(', ');
     const relic = RELICS[c.relic];
     card.innerHTML = `
-      <div class="cx-portrait">${url ? `<img src="${url}" alt="${c.name}">` : ''}</div>
+      <div class="cx-portrait">${url ? `<img src="${url}" alt="${c.name}" style="animation-delay:${(CHAR_LIST.indexOf(id) * 0.9).toFixed(1)}s">` : ''}</div>
       <div class="cx-char-info">
         <b>${c.name}</b> <em>${c.tagline}</em>
         <p>${c.desc}</p>

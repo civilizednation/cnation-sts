@@ -684,16 +684,32 @@ html, body {
 .cx-tag.who { color: #8affc0; border-color: #2f6b4a; }
 
 .cx-char {
-  display: flex; gap: 11px; padding: 11px; border-radius: 12px;
+  display: flex; align-items: stretch; gap: 11px; padding: 11px; border-radius: 12px;
   background: var(--panel); border: 1px solid var(--acc, var(--panel-edge));
   box-shadow: inset 0 0 26px rgba(0,0,0,.4);
 }
+/* 캐릭터 소개 자리다 — 초상은 카드 높이만큼 늘여 꽉 채운다.
+   min-height 는 설명이 짧은 카드에서도 너무 작아지지 않게 잡는 바닥값 */
 .cx-portrait {
-  flex: 0 0 auto; width: 78px; height: 78px; border-radius: 10px;
-  background: radial-gradient(circle at 50% 35%, rgba(255,255,255,.07), transparent 70%);
-  display: grid; place-items: center;
+  flex: 0 0 auto; width: 110px; min-height: 150px; border-radius: 10px;
+  /* 안쪽 여백은 숨쉬기 애니메이션이 가장 커졌을 때(×1.09) 가 틀 밖으로 나가지 않을 만큼 */
+  padding: 5px 6px;
+  background: radial-gradient(circle at 50% 42%, rgba(255,255,255,.08), transparent 68%);
+  display: grid; place-items: center; overflow: hidden;
 }
-.cx-portrait img { width: 100%; height: 100%; object-fit: contain; }
+.cx-portrait img {
+  width: 100%; height: 100%; object-fit: contain;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,.45));
+  animation: cx-breathe 4.4s ease-in-out infinite;
+}
+/* 천천히 숨 쉬듯 커졌다 작아졌다 (카드마다 시작을 어긋나게 해 한꺼번에 뛰지 않게) */
+@keyframes cx-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.09); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-portrait img { animation: none; }
+}
 .cx-char-info { flex: 1 1 auto; min-width: 0; }
 .cx-char-info b { color: var(--acc); font-size: 15px; }
 .cx-char-info em { font-style: normal; font-size: 11px; color: #9a92a8; margin-left: 5px; }

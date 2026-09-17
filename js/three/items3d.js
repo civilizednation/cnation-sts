@@ -49,6 +49,41 @@ function init() {
 // 머티리얼을 dispose 하면 셰이더 프로그램이 매번 재컴파일되어 훨씬 더 느려진다.
 const BAKE_PX = 96;
 
+/**
+ * 그룹을 원하는 크기·비율로 한 장 굽는다.
+ *
+ * 정사각형(bake) 은 아이템용이다. 캐릭터는 세로로 길어 정사각형에 담으면
+ * 좌우가 통째로 비고 그만큼 작게 보인다 — 세로로 긴 틀에 담아야 꽉 찬다.
+ * 바운딩 박스의 가로·세로를 각각 화각에 맞춰 보고 더 빡빡한 쪽을 쓴다.
+ * (깊이의 절반을 거리에 더해 앞쪽으로 튀어나온 부분이 잘리지 않게 한다)
+ */
+function bakeSized(group, w, h) {
+  scene.add(group);
+  const box = new THREE.Box3();
+  group.traverse((o) => { if (o.isMesh && !o.userData.noFit) box.expandByObject(o); });
+  const c = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const vFov = (36 * Math.PI / 180);
+  const aspect = w / h;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+  const d = Math.max((size.y / 2) / Math.tan(vFov / 2), (size.x / 2) / Math.tan(hFov / 2)) * 1.06
+    + size.z / 2;
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+  camera.position.set(c.x + d * 0.10, c.y + d * 0.13, c.z + d);
+  camera.lookAt(c);
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  scene.remove(group);
+  group.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });   // 머티리얼은 살려 둔다
+  // 아이템 쪽이 쓰는 정사각형 틀로 되돌려 둔다
+  camera.aspect = 1;
+  camera.updateProjectionMatrix();
+  renderer.setSize(BAKE_PX, BAKE_PX, false);
+  return url;
+}
+
 /** 그룹을 화면에 꽉 차게 담아 한 장 굽는다 */
 function bake(group) {
   scene.add(group);
@@ -535,6 +570,25 @@ export function characterIcon3D(charId, model) {
     const { group } = buildPlayer(model);
     group.rotation.y = 0.42;
     url = bake(group);
+  } catch (e) { url = null; }
+  cache.set(k, url);
+  return url;
+}
+
+/**
+ * 백과사전 캐릭터 소개용 — 세로로 긴 큰 초상.
+ * 목록의 작은 아이콘(characterIcon3D) 과 달리 크게 보여 주는 자리라
+ * 해상도를 높여 굽는다. 4장뿐이고 한 번 구우면 캐시된다.
+ */
+export function characterPortrait3D(charId, model) {
+  if (!init()) return null;
+  const k = `chp:${charId}`;
+  if (cache.has(k)) return cache.get(k);
+  let url = null;
+  try {
+    const { group } = buildPlayer(model);
+    group.rotation.y = 0.42;
+    url = bakeSized(group, 264, 396);
   } catch (e) { url = null; }
   cache.set(k, url);
   return url;
