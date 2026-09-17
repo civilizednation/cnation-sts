@@ -85,7 +85,8 @@ js/engine/
   run.js                   런 진행 : 지도 생성, 보상, 막 전환, 저장
 js/ui/
   icons.js                 SVG 글리프 + 아이콘 매핑
-  cardview.js              카드 렌더러 (ART 맵에 새 카드 id 반드시 추가)
+  cardview.js              카드 렌더러 + ART 맵 (카드id → 문양 이름)
+  cardart.js               카드 문양 224종 (색을 쓰는 여러 겹). '@a' 는 카드 종류 색
 js/three/
   scene3d.js               전투 씬 (캐릭터/몬스터/연출)
   title3d.js               타이틀 화면 3D 무대 (캐릭터 4종 + 보스 그림자)
@@ -119,7 +120,10 @@ python3 -m http.server 8099
 * `jsdelivr` 등 외부 CDN 은 이 환경에서 차단됨 → three.js 는 `vendor/` 로컬 파일 사용 유지
 * 웹폰트도 같은 이유로 `fonts/` 에 동봉한다 (v1.3.3). 구글 폰트를 다시 `<link>` 로 부르지 말 것 —
   차단형 `<link>` 는 스크립트 실행까지 붙잡아 게임 시작을 늦춘다
-* 새 카드를 추가하면 `js/ui/cardview.js` 의 `ART` 맵에 문양을 반드시 매핑할 것 (누락 시 기본 문양으로 표시)
+* 새 카드를 추가하면 `js/ui/cardview.js` 의 `ART` 맵에 문양을 매핑하고 **`node tools/check-art.mjs` 를 돌릴 것**.
+  같은 계열 안에서 문양이 겹치면 안 된다 — 익숙해지면 글자보다 문양을 먼저 보는데,
+  겹치면 문양을 보고 이름을 또 확인해야 해서 문양을 두는 의미가 없다.
+  쓸 문양이 없으면 `js/ui/cardart.js` 에 새로 만든다 (100x100 뷰박스, `[path, 색, 불투명도?]` 의 배열)
 * 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/icons.js` 의 `POWER_GLYPH` 에 아이콘 매핑
 * Slay the Spire 는 Mega Crit 저작물 — 비영리 팬 프로젝트로만 유지, 원작 에셋 반입 금지
 * **익명 인증 백업을 다시 시도하지 말 것** (v1.3.2 에서 넣었다가 v1.3.4 에서 철회).

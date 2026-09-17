@@ -2,98 +2,119 @@
 //  카드 시각화 : HTML/CSS + SVG 조합 (외부 이미지 없음)
 // ============================================================
 import { GLYPH, svgIcon } from './icons.js';
+import { ART_GLYPH, layerColor } from './cardart.js';
 import { TYPE_KR, RARITY_KR, setCardPreview } from '../data/carddb.js';
 import { KEYWORDS as KEYWORD_LIST } from '../data/keywords.js';
 
-/** 카드별 문양 매핑 */
+/** 카드별 문양 매핑
+ *
+ *  같은 계열 안에서는 문양이 겹치지 않는다. 게임에 익숙해지면 글자보다 문양을
+ *  먼저 보게 되는데, 겹쳐 있으면 문양을 보고 이름을 또 확인해야 해서 의미가 없다.
+ *  문양 자체는 js/ui/cardart.js 의 ART_GLYPH 에 있다.
+ *  tools/check-art.mjs 로 중복·누락을 검사한다.
+ */
 const ART = {
-  strike_r: 'sword', defend_r: 'shield', bash: 'hammer',
-  anger: 'fist', armaments: 'hammer', bodySlam: 'shield', clash: 'twinSword', cleave: 'axe',
-  clothesline: 'chain', flex: 'fist', havoc: 'spiral', headbutt: 'skull', heavyBlade: 'axe',
-  ironWave: 'wave', perfectedStrike: 'sword', pommelStrike: 'hammer', shrugItOff: 'shield',
-  swordBoomerang: 'twinSword', thunderclap: 'lightning', trueGrit: 'shield', twinStrike: 'twinSword',
-  warcry: 'star', wildStrike: 'claw',
-  battleTrance: 'eye', bloodForBlood: 'blood', bloodletting: 'drop', burningPact: 'flame',
-  carnage: 'axe', combust: 'flame', darkEmbrace: 'wing', disarm: 'minus', dropkick: 'foot',
-  dualWield: 'twinSword', entrench: 'shieldSpike', evolve: 'spiral', feelNoPain: 'shield',
-  fireBreathing: 'flame', flameBarrier: 'flame', ghostlyArmor: 'shield', hemokinesis: 'blood',
-  infernalBlade: 'sword', inflame: 'flame', intimidate: 'skull', metallicize: 'gear',
-  powerThrough: 'shieldSpike', pummel: 'fist', rage: 'fist', rampage: 'claw',
-  recklessCharge: 'foot', rupture: 'blood', searingBlow: 'flame', secondWind: 'wave',
-  seeingRed: 'eye', sentinel: 'shield', severSoul: 'claw', shockwave: 'wave',
-  spotWeakness: 'eye', uppercut: 'fist', whirlwind: 'spiral',
-  barricade: 'shieldSpike', berserk: 'lightning', bludgeon: 'hammer', brutality: 'blood',
-  corruption: 'skull', demonForm: 'skull', doubleTap: 'twinSword', exhume: 'spiral',
-  feed: 'heart', fiendFire: 'flame', immolate: 'flame', impervious: 'shield',
-  juggernaut: 'hammer', limitBreak: 'arrowUp', offering: 'drop', reaper: 'claw',
-  bandageUp: 'heart', blind: 'eye', darkShackles: 'chain', deepBreath: 'wave', discovery: 'question',
-  dramaticEntrance: 'star', enlightenment: 'eye', finesse: 'wing', flashOfSteel: 'sword',
-  goodInstincts: 'shield', impatience: 'hourglass', jackOfAllTrades: 'star', madness: 'spiral',
-  mindBlast: 'lightning', panacea: 'potion', panicButton: 'shield', purity: 'ring',
-  swiftStrike: 'sword', trip: 'foot', apotheosis: 'star', handOfGreed: 'claw', magnetism: 'ring',
-  masterOfStrategy: 'book', mayhem: 'spiral', metamorphosis: 'spiral', panache: 'star',
-  sadisticNature: 'claw', secretTechnique: 'book', secretWeapon: 'sword', theBomb: 'bomb',
-  thinkingAhead: 'hourglass', transmutation: 'spiral', violence: 'claw',
-  // ---- 사일런트 ----
-  strike_g: 'sword', defend_g: 'shield', neutralize: 'claw', survivor: 'shield', shiv: 'twinSword',
-  acrobatics: 'wing', backflip: 'wing', bane: 'drop', bladeDance: 'twinSword', cloakAndDagger: 'twinSword',
-  daggerSpray: 'star', daggerThrow: 'twinSword', deadlyPoison: 'drop', deflect: 'shield', dodgeAndRoll: 'foot',
-  flyingKnee: 'foot', outmaneuver: 'hourglass', piercingWail: 'wave', poisonedStab: 'drop', prepared: 'book',
-  quickSlash: 'sword', slice: 'sword', sneakyStrike: 'claw', suckerPunch: 'fist',
-  accuracy: 'sword', allOutAttack: 'star', backstab: 'claw', blurCard: 'wing', bouncingFlask: 'potion',
-  calculatedGamble: 'spiral', caltrops: 'thorn', catalyst: 'potion', choke: 'chain', concentrate: 'eye',
-  cripplingCloud: 'drop', dash: 'foot', distraction: 'spiral', endlessAgony: 'blood', escapePlan: 'foot',
-  eviscerate: 'claw', expertise: 'book', finisher: 'sword', flechettes: 'twinSword', footwork: 'wing',
-  heelHook: 'foot', infiniteBlades: 'twinSword', legSweep: 'foot', masterfulStab: 'blood', noxiousFumes: 'drop',
-  predator: 'claw', reflex: 'lightning', riddleWithHoles: 'star', setup: 'book', skewer: 'sword',
-  stormOfSteel: 'spiral', tactician: 'star', terror: 'skull', unload: 'claw', wellLaidPlans: 'shield',
-  alchemize: 'potion', bulletTime: 'hourglass',
-  adrenaline: 'lightning', afterImage: 'wing', aThousandCuts: 'claw', burstCard: 'twinSword',
-  corpseExplosion: 'bomb', dieDieDie: 'skull', doppelganger: 'twinSword', envenom: 'drop',
-  glassKnife: 'twinSword', grandFinale: 'star', malaise: 'arrowDown', nightmare: 'skull',
-  phantasmalKiller: 'skull', toolsOfTheTrade: 'gear', wraithForm: 'ring', venomThrow: 'drop',
-
-  // ---- 디펙트 ----
-  strike_b: 'sword', defend_b: 'shield', zap: 'lightning', dualcast: 'twinSword',
-  ballLightning: 'lightning', barrage: 'star', beamCell: 'lightning', chargeBattery: 'ring', claw: 'claw',
-  coldSnap: 'drop', compileDriver: 'gear', coolheaded: 'drop', goForTheEyes: 'eye', hologram: 'ring',
-  leap: 'wing', rebound: 'spiral', recursion: 'spiral', stack: 'shield', steamBarrier: 'shield',
-  streamline: 'lightning', sweepingBeam: 'wave', turbo: 'lightning',
-  aggregate: 'gear', autoShields: 'shield', blizzard: 'drop', bootSequence: 'shield', bullseye: 'eye',
-  capacitor: 'ring', chaos: 'spiral', chill: 'drop', consume: 'ring', darkness: 'ring',
-  defragment: 'ring', doomAndGloom: 'skull', doubleEnergy: 'lightning', equilibrium: 'shield', ftl: 'wing',
-  forceField: 'shield', fusion: 'star', geneticAlgorithm: 'gear', glacier: 'drop', heatsinks: 'gear',
-  helloWorldCard: 'book', loopCard: 'spiral', melter: 'flame', overclock: 'flame', recycle: 'spiral',
-  reinforcedBody: 'shield', reprogram: 'gear', ripAndTear: 'claw', scrapeCard: 'claw', selfRepair: 'heart',
-  skim: 'book', staticDischargeCard: 'lightning', stormCard: 'lightning', sunder: 'hammer', tempest: 'lightning',
-  whiteNoise: 'wave', lockOnCard: 'eye',
-  allForOne: 'star', amplifyCard: 'lightning', biasedCognition: 'eye', bufferCard: 'shield', coreSurge: 'ring',
-  creativeAICard: 'gear', echoForm: 'twinSword', electrodynamics: 'lightning', fission: 'spiral',
-  hyperbeam: 'lightning', machineLearningCard: 'book', meteorStrike: 'hammer', multiCast: 'twinSword',
-  rainbow: 'star', reboot: 'spiral', seek: 'eye', thunderStrike: 'lightning',
-
-  // ---- 와쳐 ----
-  strike_p: 'sword', defend_p: 'shield', eruption: 'flame', vigilance: 'shield',
-  insight: 'eye', smite: 'lightning', miracle: 'star', safety: 'shield', throughViolence: 'claw',
-  beta: 'ring', omegaCard: 'star', judgmentStrike: 'flame',
-  bowlingBash: 'hammer', consecrate: 'star', crescendo: 'flame', crushJoints: 'fist', cutThroughFate: 'eye',
-  emptyBody: 'ring', emptyFist: 'fist', evaluate: 'eye', flurryOfBlows: 'fist', flyingSleeves: 'wing',
-  followUp: 'fist', halt: 'shield', justLucky: 'star', pressurePoints: 'eye', prostrate: 'ring',
-  protect: 'shield', sashWhip: 'chain', thirdEye: 'eye', tranquility: 'wave',
-  battleHymn: 'flame', carveReality: 'sword', collect: 'star', conclude: 'hourglass', deceiveReality: 'shield',
-  emptyMind: 'ring', fasting: 'fist', fearNoEvil: 'wave', foreignInfluence: 'spiral', foresight: 'eye',
-  indignation: 'flame', innerPeace: 'wave', likeWater: 'wave', meditate: 'ring', mentalFortress: 'shield',
-  nirvana: 'ring', perseverance: 'shield', pray: 'ring', reachHeaven: 'crown', rushdown: 'foot',
-  sanctity: 'shield', sandsOfTime: 'hourglass', signatureMove: 'sword', simmeringFury: 'flame',
-  studyCard: 'book', swivel: 'spiral', talkToTheHand: 'fist', tantrum: 'flame', waveOfTheHand: 'wave',
-  weave: 'spiral', wheelKick: 'foot', windUp: 'fist', worship: 'ring', wreathOfFlame: 'flame',
-  conjureBlade: 'sword', scrawl: 'book',
-  alpha: 'ring', blasphemy: 'skull', brilliance: 'star', devaForm: 'crown', devotion: 'ring',
-  deusExMachina: 'gear', establishment: 'shield', judgment: 'crown', lessonLearned: 'book',
-  masterReality: 'star', omniscience: 'eye', ragnarok: 'lightning', spiritShield: 'shield',
-  vault: 'hourglass', wish: 'star', blasphemerBook: 'book',
-
-  burn: 'flame', dazed: 'spiral', slimed: 'drop', void: 'ring', wound: 'blood',
+  // ── 아이언클래드 75장 ──
+  strike_r: 'sword', defend_r: 'shield', bash: 'hammer', anger: 'wrath',
+  armaments: 'plate', bodySlam: 'wall', clash: 'twinBlade', cleave: 'axe',
+  clothesline: 'chain', flex: 'fistPunch', havoc: 'runeSpiral', headbutt: 'helmet',
+  heavyBlade: 'cleaver', ironWave: 'wave', perfectedStrike: 'runeStar', pommelStrike: 'mace',
+  shrugItOff: 'barrier', swordBoomerang: 'runeEdge', thunderclap: 'lightning', trueGrit: 'runeShield',
+  twinStrike: 'daggerFan', warcry: 'banner', wildStrike: 'claw', battleTrance: 'aura',
+  bloodForBlood: 'blood', bloodletting: 'vial', burningPact: 'candle', carnage: 'scythe',
+  combust: 'ember', darkEmbrace: 'wing', disarm: 'swap', dropkick: 'kick',
+  dualWield: 'twinBlade2', entrench: 'tower', evolve: 'runeBox', feelNoPain: 'knuckle',
+  fireBreathing: 'brand', flameBarrier: 'flame', ghostlyArmor: 'cloud', hemokinesis: 'heart',
+  infernalBlade: 'torch', inflame: 'sun', intimidate: 'mask', metallicize: 'anchor',
+  powerThrough: 'runeGate', pummel: 'arrowVolley', rage: 'runeTri', rampage: 'runeBolt',
+  recklessCharge: 'spear', rupture: 'bone', searingBlow: 'explosion', secondWind: 'lungs',
+  seeingRed: 'eye', sentinel: 'runeCross', severSoul: 'dagger', shockwave: 'tornado',
+  spotWeakness: 'thirdEye', uppercut: 'fistUp', whirlwind: 'spiralWind', barricade: 'runeWave',
+  berserk: 'skull', bludgeon: 'runeHorn', brutality: 'lungs2', corruption: 'curse',
+  demonForm: 'crown', doubleTap: 'cards2', exhume: 'tombstone', feed: 'feast',
+  fiendFire: 'hellfire', immolate: 'meteor', impervious: 'runeRing', juggernaut: 'siege',
+  limitBreak: 'runeFang', offering: 'bag', reaper: 'harvest',
+  // ── 사일런트 77장 ──
+  shiv: 'dagger', strike_g: 'sword', defend_g: 'shield', neutralize: 'claw',
+  survivor: 'cloth', acrobatics: 'wing', backflip: 'footprint', bane: 'poison',
+  bladeDance: 'daggerFan', cloakAndDagger: 'mask', daggerSpray: 'arrowVolley', daggerThrow: 'spear',
+  deadlyPoison: 'vial', deflect: 'barrier', dodgeAndRoll: 'runeSpiral', flyingKnee: 'kick',
+  outmaneuver: 'swap', piercingWail: 'bell', poisonedStab: 'poisonBlade', prepared: 'cards2',
+  quickSlash: 'twinBlade', slice: 'cleaver', sneakyStrike: 'shadowStep', suckerPunch: 'fistPunch',
+  accuracy: 'runeEye', allOutAttack: 'explosion', backstab: 'runeFang', blurCard: 'cloud',
+  bouncingFlask: 'flask2', calculatedGamble: 'dice', caltrops: 'thorn', catalyst: 'poisonCloud',
+  choke: 'chain', concentrate: 'runeRing', cripplingCloud: 'smokeCloud', dash: 'runeBolt',
+  distraction: 'question', endlessAgony: 'runeWave', escapePlan: 'door', eviscerate: 'scythe',
+  expertise: 'scroll', finisher: 'runeStar', flechettes: 'bow', footwork: 'boot',
+  heelHook: 'hook', infiniteBlades: 'runeEdge', legSweep: 'sweep', masterfulStab: 'knife2',
+  noxiousFumes: 'poisonFog', predator: 'eye', reflex: 'lightning', riddleWithHoles: 'web',
+  setup: 'hourglass', skewer: 'skewerPin', stormOfSteel: 'bladeStorm', tactician: 'banner',
+  terror: 'skull', unload: 'gunFan', wellLaidPlans: 'runeBox', alchemize: 'potion',
+  bulletTime: 'hourglassSand', adrenaline: 'heart', afterImage: 'mirror', aThousandCuts: 'runeCross',
+  burstCard: 'sparkle', corpseExplosion: 'bomb', dieDieDie: 'runeTri', doppelganger: 'twins',
+  envenom: 'poisonDrop', glassKnife: 'gem', grandFinale: 'crown', malaise: 'weakness',
+  nightmare: 'moon', phantasmalKiller: 'ghostBlade', toolsOfTheTrade: 'bag', wraithForm: 'wraith',
+  venomThrow: 'splash',
+  // ── 디펙트 76장 ──
+  strike_b: 'sword', defend_b: 'shield', zap: 'lightning', dualcast: 'twinOrb',
+  ballLightning: 'orbCore', barrage: 'arrowVolley', beamCell: 'beam', chargeBattery: 'battery',
+  claw: 'claw', coldSnap: 'snow', compileDriver: 'gear', coolheaded: 'frost',
+  goForTheEyes: 'eye', hologram: 'runeBox', leap: 'kick', rebound: 'swap',
+  recursion: 'runeSpiral', stack: 'stackPlate', steamBarrier: 'steam', streamline: 'runeBolt',
+  sweepingBeam: 'sweepBeam', turbo: 'turboFan', aggregate: 'cards2', autoShields: 'autoShield',
+  blizzard: 'blizzard', bootSequence: 'door', bullseye: 'target', capacitor: 'capPlate',
+  chaos: 'dice', chill: 'icicle', consume: 'hole', darkness: 'darkOrb',
+  defragment: 'chip', doomAndGloom: 'stormCloud', doubleEnergy: 'twinBolt', equilibrium: 'scale',
+  ftl: 'comet', forceField: 'runeShield', fusion: 'plasma', geneticAlgorithm: 'helix',
+  glacier: 'glacierWall', heatsinks: 'heatFin', helloWorldCard: 'scroll', loopCard: 'runeRing',
+  melter: 'melt', overclock: 'thermo', recycle: 'recycleArrow', reinforcedBody: 'plate',
+  reprogram: 'runeCross', ripAndTear: 'cleaver', scrapeCard: 'scrape', selfRepair: 'wrench',
+  skim: 'skimPage', staticDischargeCard: 'spark2', stormCard: 'tempestBolt', sunder: 'hammer',
+  tempest: 'tornado', whiteNoise: 'waveNoise', lockOnCard: 'crosshair', allForOne: 'magnet',
+  amplifyCard: 'amp', biasedCognition: 'brain', bufferCard: 'bufferRing', coreSurge: 'coreBurst',
+  creativeAICard: 'chipStar', echoForm: 'echoRing', electrodynamics: 'arcNet', fission: 'fissionSplit',
+  hyperbeam: 'hyperRay', machineLearningCard: 'learnGraph', meteorStrike: 'meteor', multiCast: 'tripleOrb',
+  rainbow: 'rainbowArc', reboot: 'rebootPower', seek: 'runeEye', thunderStrike: 'thunderBolt',
+  // ── 와쳐 83장 ──
+  insight: 'thirdEye', smite: 'runeStar', miracle: 'sparkle', safety: 'shield',
+  throughViolence: 'claw', beta: 'runeBox', omegaCard: 'runeRing', judgmentStrike: 'scale',
+  strike_p: 'sword', defend_p: 'barrier', eruption: 'flame', vigilance: 'calm',
+  bowlingBash: 'bowlPin', consecrate: 'divinity', crescendo: 'wrath', crushJoints: 'knuckle',
+  cutThroughFate: 'runeEdge', emptyBody: 'hole', emptyFist: 'fistPunch', evaluate: 'scroll',
+  flurryOfBlows: 'arrowVolley', flyingSleeves: 'sleeve', followUp: 'runeBolt', halt: 'wall',
+  justLucky: 'clover', pressurePoints: 'acupoint', prostrate: 'bow2', protect: 'plate',
+  sashWhip: 'whip', thirdEye: 'eye', tranquility: 'lotus', battleHymn: 'bell',
+  carveReality: 'carve', collect: 'bag', conclude: 'runeCross', deceiveReality: 'mirror',
+  emptyMind: 'cloud', fasting: 'hourglass', fearNoEvil: 'mask', foreignInfluence: 'door',
+  foresight: 'moonStar', indignation: 'ember', innerPeace: 'yinyang', likeWater: 'wave',
+  meditate: 'mantra', mentalFortress: 'tower', nirvana: 'lotusGlow', perseverance: 'anchor',
+  pray: 'candle', reachHeaven: 'stair', rushdown: 'kick', sanctity: 'feather',
+  sandsOfTime: 'hourglassSand', signatureMove: 'sword2', simmeringFury: 'torch', studyCard: 'book',
+  swivel: 'spiralWind', talkToTheHand: 'palm', tantrum: 'stomp', waveOfTheHand: 'handWave',
+  weave: 'weaveKnot', wheelKick: 'wheelSpin', windUp: 'coil', worship: 'prayHands',
+  wreathOfFlame: 'flameRing', conjureBlade: 'conjure', scrawl: 'quill', alpha: 'runeTri',
+  blasphemy: 'skull', brilliance: 'sun', devaForm: 'deva', devotion: 'beadString',
+  deusExMachina: 'machineHand', establishment: 'seal', judgment: 'gavel', lessonLearned: 'lesson',
+  masterReality: 'crownReal', omniscience: 'eyeAll', ragnarok: 'comet', spiritShield: 'spiritWall',
+  vault: 'vaultDoor', wish: 'coin', blasphemerBook: 'tome',
+  // ── 무색 33장 ──
+  bandageUp: 'bandage', blind: 'eye', darkShackles: 'chains', deepBreath: 'lungs',
+  discovery: 'question', dramaticEntrance: 'banner', enlightenment: 'sun', finesse: 'feather',
+  flashOfSteel: 'sword', goodInstincts: 'shield', impatience: 'hourglass', jackOfAllTrades: 'cards2',
+  madness: 'curse', mindBlast: 'brain', panacea: 'vial', panicButton: 'runeCross',
+  purity: 'sparkle', swiftStrike: 'dagger', trip: 'footprint', apotheosis: 'divinity',
+  handOfGreed: 'coin', magnetism: 'magnet', masterOfStrategy: 'scroll', mayhem: 'explosion',
+  metamorphosis: 'runeSpiral', panache: 'flame', sadisticNature: 'claw', secretTechnique: 'book',
+  secretWeapon: 'knuckle', theBomb: 'bomb', thinkingAhead: 'thirdEye', transmutation: 'swap',
+  violence: 'fistPunch',
+  // ── 상태이상 5장 ──
+  burn: 'ember', dazed: 'zzz', slimed: 'poisonCloud', void: 'hole',
+  wound: 'bandageTorn',
+  // ── 저주 14장 ──
+  ascendersBane: 'curse', clumsy: 'footprint', curseOfTheBell: 'bell', decay: 'skull',
+  doubt: 'question', injury: 'bone', necronomicurse: 'tome2', normality: 'wall',
+  pain: 'heart', parasite: 'web', pride: 'crown', regret: 'tombstone',
+  shame: 'mask', writhe: 'chains',
 };
 
 const TYPE_THEME = {
@@ -142,11 +163,28 @@ function decorate(text, baseText) {
 /** 카드 문양 SVG */
 export function cardArtSVG(card) {
   const th = TYPE_THEME[card.type] || TYPE_THEME.skill;
-  const g = ART[card.id] || (card.type === 'attack' ? 'sword' : card.type === 'power' ? 'ring' : card.type === 'curse' ? 'skull' : 'star');
-  const d = GLYPH[g] || GLYPH.star;
+  const g = ART[card.id] || (card.type === 'attack' ? 'sword' : card.type === 'power' ? 'ring'
+    : card.type === 'curse' ? 'curse' : card.type === 'status' ? 'weakness' : 'star');
   const id = 'ag' + card.id.replace(/[^a-z0-9]/gi, '');
-  const outline = (g === 'wing' || g === 'spiral');
-  return `<svg class="card-art-svg" viewBox="0 0 100 62" preserveAspectRatio="xMidYMid slice">
+
+  // 카드 문양(cardart.js)은 색을 쓰는 여러 겹이고, 없으면 유물용 단색 문양으로 떨어진다
+  const layers = ART_GLYPH[g];
+  let art;
+  if (layers) {
+    art = layers.map(([d, c, op]) => {
+      const fill = layerColor(c, th.glow);
+      // 선으로만 그린 겹 (path 에 닫힘이 없는 것) 은 stroke 로 살려 준다
+      const strokeOnly = !/[Zz]/.test(d);
+      return strokeOnly
+        ? `<path d="${d}" fill="none" stroke="${fill}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="${op ?? 1}"/>`
+        : `<path d="${d}" fill="${fill}" fill-rule="evenodd" opacity="${op ?? 1}"/>`;
+    }).join('');
+  } else {
+    const d = GLYPH[g] || GLYPH.star;
+    art = `<path d="${d}" fill="#ffffff" fill-opacity="0.92" stroke="${th.a}" stroke-width="3" stroke-linejoin="round"/>`;
+  }
+
+  return `<svg class="card-art-svg" viewBox="0 0 100 62" preserveAspectRatio="xMidYMin slice">
     <defs>
       <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="${th.b}"/><stop offset="1" stop-color="${th.a}"/>
@@ -162,9 +200,10 @@ export function cardArtSVG(card) {
       <path d="M0 46 L22 24 L44 46 L66 20 L100 50"/>
       <path d="M0 58 L26 38 L52 58 L74 34 L100 60"/>
     </g>
-    <g transform="translate(31,3) scale(0.62)">
-      <path d="${d}" fill="${outline ? 'none' : '#ffffff'}" fill-opacity="0.92"
-        ${outline ? `stroke="#ffffff" stroke-width="7" stroke-linecap="round"` : `stroke="${th.a}" stroke-width="3" stroke-linejoin="round"`}/>
+    <!-- 이름표가 그림 띠의 아래쪽을 덮으므로 문양은 위쪽에 둔다.
+         YMin 으로 맞춰 어느 카드 비율에서든 띠의 윗부분이 항상 보이게 한다. -->
+    <g transform="translate(33,2) scale(0.34)" stroke="rgba(0,0,0,.45)" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">
+      ${art}
     </g>
   </svg>`;
 }
