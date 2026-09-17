@@ -720,7 +720,8 @@ function codexCards(body) {
     return (ord[dx.type] - ord[dy.type]) || ((dx.cost ?? 0) - (dy.cost ?? 0)) || dx.name.localeCompare(dy.name);
   });
   body.appendChild(el('p', { class: 'cx-count', text: `${ids.length}장 · 카드를 누르면 상세 설명이 열립니다` }));
-  const grid = el('div', { class: 'card-grid' });
+  // 백과사전은 카드를 "읽는" 화면이라 한 줄에 4장만 두고 크게 보여 준다 (cx-cards)
+  const grid = el('div', { class: 'card-grid cx-cards' });
   ids.forEach((id) => {
     const card = codexCard(id);
     const ce = renderCard(card, { small: true });
