@@ -53,6 +53,9 @@
 ```
 index.html                 진입점 (importmap + 화면 골격)
 css/style.css              모바일 세로형 레이아웃 / 카드 스타일
+css/fonts.css              동봉 웹폰트 @font-face (tools/fetch-fonts.py 가 생성 — 손으로 고치지 말 것)
+fonts/                     웹폰트 woff2 조각 189개 (1.5MB) + OFL.txt
+tools/fetch-fonts.py       폰트 꾸러미 생성기 (폰트를 새로 올릴 때만 실행)
 js/version.js              ★ 버전 (수정 요청 시 여기부터 올린다)
 js/main.js                 컨트롤러 : 화면 전환, 전투 UI, 보상/상점/이벤트/모닥불
 js/profile.js              계정(최대 5개) + 계정별 저장 키 · 런 기록/통계 (localStorage)
@@ -113,6 +116,8 @@ python3 -m http.server 8099
 ## 주의사항
 
 * `jsdelivr` 등 외부 CDN 은 이 환경에서 차단됨 → three.js 는 `vendor/` 로컬 파일 사용 유지
+* 웹폰트도 같은 이유로 `fonts/` 에 동봉한다 (v1.3.3). 구글 폰트를 다시 `<link>` 로 부르지 말 것 —
+  차단형 `<link>` 는 스크립트 실행까지 붙잡아 게임 시작을 늦춘다
 * 새 카드를 추가하면 `js/ui/cardview.js` 의 `ART` 맵에 문양을 반드시 매핑할 것 (누락 시 기본 문양으로 표시)
 * 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/icons.js` 의 `POWER_GLYPH` 에 아이콘 매핑
 * Slay the Spire 는 Mega Crit 저작물 — 비영리 팬 프로젝트로만 유지, 원작 에셋 반입 금지
