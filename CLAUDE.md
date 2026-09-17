@@ -59,8 +59,6 @@ tools/fetch-fonts.py       폰트 꾸러미 생성기 (폰트를 새로 올릴 �
 js/version.js              ★ 버전 (수정 요청 시 여기부터 올린다)
 js/main.js                 컨트롤러 : 화면 전환, 전투 UI, 보상/상점/이벤트/모닥불
 js/profile.js              계정(최대 5개) + 계정별 저장 키 · 런 기록/통계 (localStorage)
-js/cloud.js                계정·전적 클라우드 백업 (Firebase 익명인증 + Firestore, REST 직접 호출)
-firestore.rules            Firestore 보안 규칙 (콘솔에 붙여 넣는 용도)
 js/audio.js                합성 효과음 + 소리 설정(효과음·배경음 on/off, 음량) 저장
 js/bgm.js                  배경음악 : 화면별 곡 지정 · 크로스페이드 · 전투곡 랜덤
 audio/                     배경음악 mp3 15곡 (128kbps)
@@ -121,3 +119,7 @@ python3 -m http.server 8099
 * 새 카드를 추가하면 `js/ui/cardview.js` 의 `ART` 맵에 문양을 반드시 매핑할 것 (누락 시 기본 문양으로 표시)
 * 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/icons.js` 의 `POWER_GLYPH` 에 아이콘 매핑
 * Slay the Spire 는 Mega Crit 저작물 — 비영리 팬 프로젝트로만 유지, 원작 에셋 반입 금지
+* **클라우드 백업을 다시 시도하지 말 것** (v1.3.2 에서 넣었다가 v1.3.4 에서 철회).
+  익명 인증의 토큰이 계정 데이터와 같은 localStorage 에 있어, 저장소가 지워지면
+  신원도 함께 날아가 새 uid 가 발급된다 → 예전 백업을 영영 못 찾는다.
+  진짜 로그인 없이는 성립하지 않는다. ITP 대비는 "홈 화면에 추가(PWA 설치)" 안내가 답이다
