@@ -161,11 +161,14 @@ export const Records = {
   /**
    * 통계 계산.
    * 완주한 판(승리·사망)만 평균·클리어율에 넣고, 포기한 판은 따로 센다.
-   * 숨겨진 보너스를 쓴 판은 기본적으로 제외한다 (통계가 의미를 잃지 않도록).
+   *
+   * 숨겨진 시작 보너스를 쓴 판은 게임 테스트용이라 통계에 넣지 않는다.
+   * 지금은 아예 기록하지 않지만(main.js recordRun), 그 전에 쌓인 기록이
+   * 남아 있을 수 있어 여기서도 한 번 더 걸러 낸다.
    */
-  stats(profileId, { includeCheat = false } = {}) {
+  stats(profileId) {
     const all = Records.list(profileId);
-    const used = all.filter((r) => includeCheat || !r.cheat);
+    const used = all.filter((r) => !r.cheat);
     const done = used.filter((r) => r.result === 'victory' || r.result === 'death');
 
     const byChar = {};
@@ -201,11 +204,10 @@ export const Records = {
       avgFloor: done.length ? floorSum / done.length : 0,
       bestFloor: done.reduce((a, r) => Math.max(a, r.floor), 0),
       abandoned: used.filter((r) => r.result === 'abandon').length,
-      cheatRuns: all.filter((r) => r.cheat).length,
       playMs,
       byChar: Object.values(byChar),
       acts,
-      recent: all.slice(-30).reverse(),
+      recent: used.slice(-30).reverse(),
     };
   },
 };

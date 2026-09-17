@@ -358,8 +358,7 @@ function showStats(profileId) {
     card('최고 기록', st.bestFloor ? st.bestFloor + '층' : '-'),
   );
   body.appendChild(sum);
-  body.appendChild(el('p', { class: 'stat-note',
-    text: `총 플레이 ${fmtDuration(st.playMs)}` + (st.cheatRuns ? ` · 숨겨진 보너스를 쓴 ${st.cheatRuns}판은 집계에서 제외` : '') }));
+  body.appendChild(el('p', { class: 'stat-note', text: `총 플레이 ${fmtDuration(st.playMs)}` }));
 
   // ② 캐릭터별
   if (st.byChar.length) {
@@ -403,11 +402,9 @@ function showStats(profileId) {
       el('span', { class: 'sl-date', text: fmtDate(r.endedAt) }),
       el('span', { class: 'sl-char', text: r.charName || r.char }),
       el('span', { class: 'sl-floor', text: r.floor + '층' }),
-      el('span', { class: 'sl-res', text: RESULT_KR[r.result] || String(r.result) }),
-      r.cheat ? el('span', { class: 'sl-cheat', text: '★' }) : el('span', { class: 'sl-cheat' })));
+      el('span', { class: 'sl-res', text: RESULT_KR[r.result] || String(r.result) })));
   });
   body.appendChild(list);
-  body.appendChild(el('p', { class: 'rel-foot', text: '★ 는 숨겨진 시작 보너스를 쓴 판입니다.' }));
   body.scrollTop = 0;
   showScreen('scr-stats');
 }
@@ -426,6 +423,8 @@ function fmtDate(ts) {
 function recordRun(run, result) {
   const pid = Profiles.activeId();
   if (!pid || !run) return;
+  // 숨겨진 시작 보너스를 쓴 판은 게임 테스트용이라 아예 남기지 않는다
+  if (run.cheat) return;
   try {
     Records.add(pid, {
       char: run.charId, charName: run.charName, result,
