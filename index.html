@@ -24,7 +24,7 @@
   <!-- ============ 타이틀 ============ -->
   <section class="screen" id="scr-title">
     <div class="title-bg"></div>
-    <button class="title-gear" id="btn-settings" aria-label="설정"></button>
+    <button class="title-gear" id="btn-settings-title" aria-label="설정"></button>
     <div class="title-head">
       <h1 class="game-title"><b class="brand">cnation</b><span>Slay the Spire</span></h1>
     </div>
@@ -32,6 +32,7 @@
       <canvas id="title-canvas"></canvas>
     </div>
     <div class="title-wrap">
+      <button class="profile-chip" id="btn-profile"></button>
       <div class="title-menu">
         <button class="btn big" id="btn-new">새 게임</button>
         <button class="btn big ghost" id="btn-continue">이어하기</button>
@@ -107,6 +108,24 @@
       <button class="btn sm" id="btn-history-home">홈으로</button>
     </header>
     <div class="history-body" id="history-body"></div>
+  </section>
+
+  <!-- ============ 계정 ============ -->
+  <section class="screen" id="scr-profile" hidden>
+    <header class="history-top">
+      <h2>계정</h2>
+      <button class="btn sm" id="btn-profile-close">닫기</button>
+    </header>
+    <div class="history-body" id="profile-body"></div>
+  </section>
+
+  <!-- ============ 전적 ============ -->
+  <section class="screen" id="scr-stats" hidden>
+    <header class="history-top">
+      <h2 id="stats-title">전적</h2>
+      <button class="btn sm" id="btn-stats-close">닫기</button>
+    </header>
+    <div class="history-body" id="stats-body"></div>
   </section>
 
   <!-- ============ 백과사전 ============ -->

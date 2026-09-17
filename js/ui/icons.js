@@ -39,6 +39,7 @@ export const GLYPH = {
   hourglass: 'M22 10 h56 v10 L56 50 l22 30 v10 H22 V80 L44 50 L22 20 Z',
   plus: 'M42 14 h16 v28 h28 v16 H58 v28 H42 V58 H14 V42 h28 Z',
   minus: 'M14 42 h72 v16 H14 Z',
+  trash: 'M38 8 h24 l4 8 h18 v12 H16 V16 h18 Z M22 34 h56 l-5 54 a6 6 0 0 1 -6 6 H33 a6 6 0 0 1 -6 -6 Z',
 };
 
 /** 힘/상태이상 아이콘 매핑 */

@@ -58,6 +58,7 @@ export class Run {
     this.monsterQueue = [];
     this.eliteQueue = [];
     this.unknownChance = { monster: 10, shop: 3, treasure: 2 };
+    this.startedAt = Date.now();   // 통계용 : 이 런을 시작한 시각
     // 시작 보너스 화면의 숨겨진 선택지 — 최대 체력·공격·방어·물약 효과가 2배
     this.cheat = false;
     this.usedEvents = [];
@@ -404,6 +405,7 @@ export class Run {
       monsterCount: this.monsterCount, cardRarityBonus: this.cardRarityBonus,
       potionChance: this.potionChance, bossEncounter: this.bossEncounter,
       usedEvents: this.usedEvents, unknownChance: this.unknownChance, cheat: this.cheat,
+      startedAt: this.startedAt,
     };
   }
 
@@ -425,6 +427,7 @@ export class Run {
     r.usedEvents = o.usedEvents || [];
     r.unknownChance = o.unknownChance || { monster: 10, shop: 3, treasure: 2 };
     r.cheat = !!o.cheat;
+    r.startedAt = o.startedAt || Date.now();
     r.monsterQueue = r.rng.shuffle(ENCOUNTERS[r.act].weak.slice());
     r.strongQueue = r.rng.shuffle(ENCOUNTERS[r.act].strong.slice());
     r.eliteQueue = r.rng.shuffle(ENCOUNTERS[r.act].elite.slice());
@@ -432,15 +435,20 @@ export class Run {
   }
 }
 
-export const SAVE_KEY = 'cnation_sts_save_v1';
+// 저장 키는 계정(프로필)마다 다르다. main.js 가 계정을 고를 때 지정한다.
+export const SAVE_KEY = 'cnation_sts_save_v1';   // 계정 도입 전 키 (이전용으로만 남겨 둔다)
+let saveKey = SAVE_KEY;
+export function setSaveKey(k) { saveKey = k || SAVE_KEY; }
+export function getSaveKey() { return saveKey; }
+
 export function saveRun(run) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(run.toJSON())); } catch (e) { console.warn('저장 실패', e); }
+  try { localStorage.setItem(saveKey, JSON.stringify(run.toJSON())); } catch (e) { console.warn('저장 실패', e); }
 }
 export function loadRun() {
   try {
-    const s = localStorage.getItem(SAVE_KEY);
+    const s = localStorage.getItem(saveKey);
     if (!s) return null;
     return Run.fromJSON(JSON.parse(s));
   } catch (e) { console.warn('불러오기 실패', e); return null; }
 }
-export function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+export function clearSave() { try { localStorage.removeItem(saveKey); } catch (e) {} }

@@ -55,6 +55,7 @@ index.html                 진입점 (importmap + 화면 골격)
 css/style.css              모바일 세로형 레이아웃 / 카드 스타일
 js/version.js              ★ 버전 (수정 요청 시 여기부터 올린다)
 js/main.js                 컨트롤러 : 화면 전환, 전투 UI, 보상/상점/이벤트/모닥불
+js/profile.js              계정(최대 5개) + 계정별 저장 키 · 런 기록/통계 (localStorage)
 js/audio.js                합성 효과음 + 소리 설정(효과음·배경음 on/off, 음량) 저장
 js/bgm.js                  배경음악 : 화면별 곡 지정 · 크로스페이드 · 전투곡 랜덤
 audio/                     배경음악 mp3 15곡 (128kbps)

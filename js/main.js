@@ -4,7 +4,8 @@
 import { $, $$, el, sleep, clamp } from './util.js';
 import { VERSION } from './version.js';
 import { CHANGELOG } from './data/changelog.js';
-import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, ACT_RANGES } from './engine/run.js';
+import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, setSaveKey, ACT_RANGES } from './engine/run.js';
+import { Profiles, Records, MAX_PROFILES, MAX_NAME, saveKeyOf, cleanName } from './profile.js';
 import { Battle } from './engine/battle.js';
 import { POWERS, powerName, powerDesc } from './engine/powers.js';
 import { CARD_DEFS, Card, mk, TYPE_KR, RARITY_KR } from './data/cards.js';
@@ -43,11 +44,14 @@ window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // 자동 테스트용
 window.__fight = (ids) => startBattle({ monsters: ids, kind: 'boss' });     // 자동 테스트용
 window.__rewards = (rw, done) => showRewards(rw, done || (() => goMap()));  // 자동 테스트용
+window.__afterBoss = () => afterBoss();                                     // 자동 테스트용
 
-const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex', 'scr-modal'];
+const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex', 'scr-profile', 'scr-stats', 'scr-modal'];
 function showScreen(id) {
   if (id !== 'scr-modal') clearModal();
-  if (id === 'scr-title') BGM.play('title');
+  if (id === 'scr-title') { BGM.play('title'); renderProfileChip();
+    const c = $('#btn-continue'); const a = Profiles.active();
+    if (c) c.disabled = !(a && Profiles.hasSave(a.id)); }
   SCREENS.forEach((s) => { const e = $('#' + s); if (e) e.hidden = s !== id; });
   if (id === 'scr-title') requestAnimationFrame(() => { try { T3.resizeTitle(); } catch (e) { /* noop */ } });
 }
@@ -163,6 +167,10 @@ function modalText(text) { return el('p', { class: 'modal-text', text }); }
 // ============================================================
 function initTitle() {
   startTitleScene();
+  // 계정 준비 : 예전 저장이 있으면 첫 계정으로 옮기고, 없으면 이름을 받는다
+  Profiles.migrateLegacy();
+  useProfile(Profiles.activeId());
+  if (!Profiles.count()) askFirstProfile();
   BGM.play('title');
   BGM.prefetch('map');          // 새 게임을 누르면 바로 쓸 곡
   // 모바일은 첫 사용자 동작 전에는 소리를 못 낸다 — 타이틀 아무 곳이나 누르면 잠금을 푼다
@@ -177,7 +185,11 @@ function initTitle() {
     // 게임 중이면 원래 화면으로, 아니면 타이틀로
     showScreen(G.battle ? 'scr-battle' : G.run ? 'scr-map' : 'scr-title');
   });
-  $('#btn-new').addEventListener('click', () => { unlockAudio(); SFX.tap(); newGame(); });
+  $('#btn-new').addEventListener('click', () => {
+    unlockAudio(); SFX.tap();
+    if (!Profiles.count()) { askFirstProfile(() => newGame()); return; }
+    newGame();
+  });
   $('#btn-continue').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
     const r = loadRun();
@@ -187,12 +199,17 @@ function initTitle() {
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
   $('#btn-codex').addEventListener('click', () => { unlockAudio(); SFX.tap(); showCodex('card', 'red'); });
-  const gear = $('#btn-settings');
+  $('#btn-profile').addEventListener('click', () => {
+    unlockAudio(); SFX.tap();
+    if (!Profiles.count()) askFirstProfile(); else showProfiles();
+  });
+  $('#btn-profile-close').addEventListener('click', () => { SFX.tap(); showScreen('scr-title'); });
+  $('#btn-stats-close').addEventListener('click', () => { SFX.tap(); showProfiles(); });
+  const gear = $('#btn-settings-title');
   if (gear) {
     gear.innerHTML = svgIcon('gear', { size: 22, color: '#bdb4cf' });
     gear.addEventListener('click', () => { unlockAudio(); SFX.tap(); showSettings(); });
   }
-  if (!localStorage.getItem('cnation_sts_save_v1')) $('#btn-continue').disabled = true;
 }
 
 /** 타이틀 3D 무대 (캐릭터 4종) — 타이틀이 보일 때만 돌린다 */
@@ -203,6 +220,223 @@ function startTitleScene() {
 }
 
 /** 변경 이력 화면 : 1.0.0 부터의 기능 추가/개선 내역 */
+// ============================================================
+//  계정(프로필) · 전적
+// ============================================================
+/** 지금 계정에 맞춰 저장 키를 맞추고 타이틀 표시를 갱신한다 */
+function useProfile(id) {
+  if (id) Profiles.setActive(id);
+  const p = Profiles.active();
+  setSaveKey(p ? saveKeyOf(p.id) : null);
+  renderProfileChip();
+  const btn = $('#btn-continue');
+  if (btn) btn.disabled = !(p && Profiles.hasSave(p.id));
+  return p;
+}
+
+function renderProfileChip() {
+  const chip = $('#btn-profile');
+  if (!chip) return;
+  const p = Profiles.active();
+  chip.innerHTML = `<span class="pc-icon">${svgIcon('heart', { size: 13, color: '#8ab4e8' })}</span>`
+    + `<span class="pc-name">${p ? p.name : '계정 만들기'}</span>`
+    + `<span class="pc-caret">▾</span>`;
+}
+
+/** 계정이 하나도 없을 때 — 이름을 받아 첫 계정을 만든다 */
+function askFirstProfile(after) {
+  openModal((box) => {
+    const input = el('input', { class: 'name-input', type: 'text', maxlength: String(MAX_NAME),
+      placeholder: '이름을 입력하세요', autocomplete: 'off' });
+    const err = el('div', { class: 'form-err' });
+    const submit = () => {
+      const name = cleanName(input.value);
+      if (!name) { err.textContent = '이름을 입력해 주세요.'; return; }
+      const p = Profiles.create(name);
+      if (!p) { err.textContent = '이미 있는 이름입니다.'; return; }
+      SFX.relic();
+      closeModal();
+      useProfile(p.id);
+      if (after) after(p);
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    box.append(
+      modalTitle('계정 만들기'),
+      modalText('기록과 전적이 계정별로 따로 저장됩니다.\n한 기기에 최대 ' + MAX_PROFILES + '개까지 만들 수 있습니다.'),
+      input, err,
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn gold', text: '만들기', onclick: submit })),
+    );
+    setTimeout(() => { try { input.focus(); } catch (e) { /* noop */ } }, 60);
+  });
+}
+
+function showProfiles() {
+  const body = $('#profile-body');
+  body.innerHTML = '';
+  const activeId = Profiles.activeId();
+
+  Profiles.all().forEach((p) => {
+    const st = Records.stats(p.id);
+    const row = el('div', { class: 'prof-row' + (p.id === activeId ? ' on' : '') });
+    const pick = el('button', { class: 'prof-pick' });
+    pick.innerHTML = `<b>${p.name}</b>`
+      + `<small>${st.total}판 · 클리어 ${st.wins}회`
+      + `${Profiles.hasSave(p.id) ? ' · 진행 중인 게임 있음' : ''}</small>`;
+    pick.addEventListener('click', () => {
+      SFX.tap();
+      useProfile(p.id);
+      showProfiles();
+    });
+    const stats = el('button', { class: 'prof-mini', title: '전적',
+      html: svgIcon('book', { size: 16, color: '#bdb4cf' }),
+      onclick: () => { SFX.tap(); showStats(p.id); } });
+    const trash = el('button', { class: 'prof-mini danger', title: '삭제',
+      html: svgIcon('trash', { size: 15, color: '#ff8a8a' }),
+      onclick: () => { SFX.tap(); confirmDeleteProfile(p); } });
+    row.append(pick, stats, trash);
+    body.appendChild(row);
+  });
+
+  if (Profiles.canCreate()) {
+    body.appendChild(el('button', { class: 'btn ghost', text: '+ 새 계정',
+      onclick: () => { SFX.tap(); askFirstProfile(() => showProfiles()); } }));
+  } else {
+    body.appendChild(el('p', { class: 'rel-foot', text: `계정은 최대 ${MAX_PROFILES}개까지 만들 수 있습니다.` }));
+  }
+  body.appendChild(el('p', { class: 'rel-foot',
+    text: '계정과 기록은 이 기기에만 저장됩니다.' }));
+  body.scrollTop = 0;
+  showScreen('scr-profile');
+}
+
+function confirmDeleteProfile(p) {
+  const st = Records.stats(p.id);
+  openModal((box) => {
+    box.append(
+      modalTitle('계정을 지울까요?'),
+      modalText(`"${p.name}" 계정과 그 계정의 전적 ${st.total}판, 진행 중인 게임이 모두 지워집니다.\n되돌릴 수 없습니다.`),
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn danger', text: '지우기', onclick: () => {
+          SFX.tap();
+          const wasActive = Profiles.activeId() === p.id;
+          Profiles.remove(p.id);
+          closeModal();
+          if (wasActive) { G.run = null; G.battle = null; }
+          useProfile(Profiles.activeId());
+          if (!Profiles.count()) { showScreen('scr-title'); askFirstProfile(() => showProfiles()); }
+          else showProfiles();
+        } }),
+        el('button', { class: 'btn ghost', text: '취소', onclick: () => { SFX.tap(); closeModal(); } })),
+    );
+  }, { stack: true });
+}
+
+const RESULT_KR = { victory: '클리어', death: '사망', abandon: '포기' };
+
+function showStats(profileId) {
+  const p = Profiles.all().find((x) => x.id === profileId) || Profiles.active();
+  if (!p) return;
+  const st = Records.stats(p.id);
+  $('#stats-title').textContent = `${p.name} 전적`;
+  const body = $('#stats-body');
+  body.innerHTML = '';
+
+  if (!st.total && !st.abandoned) {
+    body.appendChild(el('p', { class: 'rel-foot', text: '아직 기록이 없습니다. 한 판 끝내면 여기에 쌓입니다.' }));
+    body.scrollTop = 0; showScreen('scr-stats'); return;
+  }
+
+  // ① 요약
+  const sum = el('div', { class: 'stat-cards' });
+  const card = (label, value, sub) => el('div', { class: 'stat-card' },
+    el('b', { text: value }), el('span', { text: label }), sub ? el('small', { text: sub }) : null);
+  sum.append(
+    card('총 판수', String(st.total), st.abandoned ? `포기 ${st.abandoned}판 별도` : null),
+    card('클리어', String(st.wins), `${(st.winRate * 100).toFixed(1)}%`),
+    card('평균 도달', st.avgFloor ? st.avgFloor.toFixed(1) + '층' : '-'),
+    card('최고 기록', st.bestFloor ? st.bestFloor + '층' : '-'),
+  );
+  body.appendChild(sum);
+  body.appendChild(el('p', { class: 'stat-note',
+    text: `총 플레이 ${fmtDuration(st.playMs)}` + (st.cheatRuns ? ` · 숨겨진 보너스를 쓴 ${st.cheatRuns}판은 집계에서 제외` : '') }));
+
+  // ② 캐릭터별
+  if (st.byChar.length) {
+    body.appendChild(el('h4', { class: 'stat-h', text: '캐릭터별' }));
+    const tbl = el('div', { class: 'stat-table' });
+    tbl.appendChild(el('div', { class: 'st-row head' },
+      el('span', { text: '캐릭터' }), el('span', { text: '판수' }), el('span', { text: '클리어' }),
+      el('span', { text: '평균' }), el('span', { text: '최고' })));
+    CHAR_LIST.forEach((cid) => {
+      const ch = CHARACTERS[cid];
+      const c = st.byChar.find((x) => x.char === cid);
+      if (!c || !ch) return;
+      tbl.appendChild(el('div', { class: 'st-row' },
+        el('span', { class: 'st-name c-' + ch.color, text: ch.name }),
+        el('span', { text: String(c.runs) }),
+        el('span', { text: `${c.wins} (${(c.winRate * 100).toFixed(0)}%)` }),
+        el('span', { text: c.avgFloor.toFixed(1) }),
+        el('span', { text: String(c.best) })));
+    });
+    body.appendChild(tbl);
+  }
+
+  // ③ 어디까지 갔나 (막 구간)
+  const maxAct = Math.max(1, ...st.acts);
+  body.appendChild(el('h4', { class: 'stat-h', text: '어디서 끝났나' }));
+  const bars = el('div', { class: 'stat-bars' });
+  ['1막 (1~17층)', '2막 (18~34층)', '3막 (35~50층)'].forEach((label, i) => {
+    bars.appendChild(el('div', { class: 'sb-row' },
+      el('span', { class: 'sb-label', text: label }),
+      el('span', { class: 'sb-track' }, el('i', { style: { width: (st.acts[i] / maxAct * 100) + '%' } })),
+      el('span', { class: 'sb-num', text: String(st.acts[i]) })));
+  });
+  body.appendChild(bars);
+
+  // ④ 최근 기록
+  body.appendChild(el('h4', { class: 'stat-h', text: '최근 기록' }));
+  const list = el('div', { class: 'stat-log' });
+  st.recent.forEach((r) => {
+    // el() 은 null 자식을 걸러 주지만 네이티브 append 는 "null" 을 그대로 넣는다
+    list.appendChild(el('div', { class: 'sl-row r-' + r.result },
+      el('span', { class: 'sl-date', text: fmtDate(r.endedAt) }),
+      el('span', { class: 'sl-char', text: r.charName || r.char }),
+      el('span', { class: 'sl-floor', text: r.floor + '층' }),
+      el('span', { class: 'sl-res', text: RESULT_KR[r.result] || String(r.result) }),
+      r.cheat ? el('span', { class: 'sl-cheat', text: '★' }) : el('span', { class: 'sl-cheat' })));
+  });
+  body.appendChild(list);
+  body.appendChild(el('p', { class: 'rel-foot', text: '★ 는 숨겨진 시작 보너스를 쓴 판입니다.' }));
+  body.scrollTop = 0;
+  showScreen('scr-stats');
+}
+
+function fmtDuration(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m}분`;
+  return `${Math.floor(m / 60)}시간 ${m % 60}분`;
+}
+function fmtDate(ts) {
+  const d = new Date(ts);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** 한 판이 끝났을 때 기록을 남긴다 */
+function recordRun(run, result) {
+  const pid = Profiles.activeId();
+  if (!pid || !run) return;
+  try {
+    Records.add(pid, {
+      char: run.charId, charName: run.charName, result,
+      floor: run.floor, act: run.act,
+      kills: run.stats.kills, elites: run.stats.elites, bosses: run.stats.bosses,
+      deckSize: run.deck.length, relicCount: run.relics.length,
+      cheat: !!run.cheat, seed: run.seed, startedAt: run.startedAt,
+    });
+  } catch (e) { console.warn('기록 저장 실패', e); }
+}
+
 function showHistory() {
   const body = $('#history-body');
   body.innerHTML = '';
@@ -2352,8 +2586,9 @@ function showSettings() {
         el('button', { class: 'btn ghost', text: '유물 목록', onclick: () => { closeModal(); showRelicList(); } }),
         el('button', { class: 'btn danger', text: '런 포기 (타이틀로)', onclick: () => {
           if (!confirm('현재 런을 포기하고 타이틀로 돌아갈까요?')) return;
+          recordRun(G.run, 'abandon');
           clearSave(); G.run = null; G.battle = null; stopOverlayLoop(); closeModal(); showScreen('scr-title');
-          $('#btn-continue').disabled = true;
+          useProfile(Profiles.activeId());
         } }),
       );
     }
@@ -2380,6 +2615,7 @@ function showRelicList() {
 
 function gameOver() {
   const run = G.run;
+  recordRun(run, 'death');
   BGM.play('fail', 'fail');
   SFX.defeat();
   clearSave();
@@ -2391,13 +2627,14 @@ function gameOver() {
       modalText(`도달 층수 : ${run.floor}층 (${run.act}막)\n처치한 적 : ${run.stats.kills}\n엘리트 처치 : ${run.stats.elites}\n보스 처치 : ${run.stats.bosses}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '다시 도전', onclick: () => { closeModal(); newGame(); } }),
-        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); $('#btn-continue').disabled = true; } })),
+        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); useProfile(Profiles.activeId()); } })),
     );
   });
 }
 
 function victory() {
   const run = G.run;
+  recordRun(run, 'victory');
   BGM.play('victory', 'victory');
   SFX.victory();
   clearSave();
@@ -2409,7 +2646,7 @@ function victory() {
       modalText(`50층의 최종 보스를 쓰러뜨렸습니다!\n\n남은 체력 : ${run.player.hp}/${run.player.maxHp}\n처치한 적 : ${run.stats.kills}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '새 게임', onclick: () => { closeModal(); newGame(); } }),
-        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); $('#btn-continue').disabled = true; } })),
+        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); useProfile(Profiles.activeId()); } })),
     );
   });
 }
