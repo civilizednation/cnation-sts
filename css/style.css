@@ -207,6 +207,17 @@ html, body {
 .mode-btn small { display: block; margin-top: 3px; font-size: 11px; opacity: .78; font-weight: 400; }
 
 .form-err { font-size: 11.5px; color: #ff8a8a; min-height: 14px; text-align: center; }
+.auth-lead { margin: 0; font-size: 11.5px; line-height: 1.6; color: #9a92a8; text-align: center; }
+/* PIN 은 숫자만 넣으므로 자릿수를 세기 쉽게 띄워 둔다 */
+.pin-input { letter-spacing: 8px; font-size: 18px; }
+.pin-input::placeholder { letter-spacing: 0; font-size: 14px; }
+.link-btn {
+  background: none; border: 0; cursor: pointer; padding: 4px;
+  font-family: inherit; font-size: 11.5px; color: #7d86a8;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link-btn:active { color: #a8b4d8; }
+.acct-card small { display: block; }
 .cloud-line {
   margin: 4px 0 0; font-size: 10.5px; color: #6a6278; text-align: center;
   line-height: 1.7; white-space: pre-line;

@@ -58,9 +58,8 @@ fonts/                     웹폰트 woff2 조각 189개 (1.5MB) + OFL.txt
 tools/fetch-fonts.py       폰트 꾸러미 생성기 (폰트를 새로 올릴 때만 실행)
 js/version.js              ★ 버전 (수정 요청 시 여기부터 올린다)
 js/main.js                 컨트롤러 : 화면 전환, 전투 UI, 보상/상점/이벤트/모닥불
-js/account.js              계정 : 게스트 / 구글 로그인, uid 기준 Firestore 전적 (REST)
+js/account.js              계정 : 게스트 / 이메일+6자리 PIN 로그인, uid 기준 Firestore 전적 (전부 REST)
 js/legacy.js               v1.3.x 로컬 5계정 잔재를 첫 로그인 때 한 번 들여오기
-vendor/firebase-auth.js    Firebase Auth 자체 번들 (tools/build-firebase.sh 가 생성)
 firestore.rules            Firestore 보안 규칙 (콘솔에 붙여 넣는 용도)
 js/audio.js                합성 효과음 + 소리 설정(효과음·배경음 on/off, 음량) 저장
 js/bgm.js                  배경음악 : 화면별 곡 지정 · 크로스페이드 · 전투곡 랜덤
@@ -129,9 +128,14 @@ python3 -m http.server 8099
 * **익명 인증 백업을 다시 시도하지 말 것** (v1.3.2 에서 넣었다가 v1.3.4 에서 철회).
   익명 인증의 토큰이 계정 데이터와 같은 localStorage 에 있어, 저장소가 지워지면
   신원도 함께 날아가 새 uid 가 발급된다 → 예전 백업을 영영 못 찾는다.
-  v1.3.5 의 구글 로그인이 이 문제의 답이다 — 신원이 기기 밖에 있어 다시 로그인하면
-  같은 uid 가 나온다. 전적을 남기려면 로그인이 필요하고, 게스트는 전적을 남기지 않는다
+  v1.3.10 의 이메일+PIN 로그인이 이 문제의 답이다 — 신원이 기기 밖(사용자의 머릿속과
+  이메일함)에 있어 다시 로그인하면 같은 uid 가 나온다.
+  전적을 남기려면 로그인이 필요하고, 게스트는 전적을 남기지 않는다
 * 전적 기능을 건드릴 때 : 게스트(`Account.isGuest()`)에서는 `Records.add` 가 아무것도 하지
   않는다. 게스트에게 전적이 쌓이는 것처럼 보이는 UI 를 만들지 말 것
-* Firebase SDK 는 "구글로 로그인" 을 누를 때만 `import()` 한다. 최상단에서 import 하면
-  게스트도 33KB 를 받게 되므로 그렇게 바꾸지 말 것
+* 로그인은 **이메일 + 숫자 6자리 PIN**, Firebase Auth REST 만 쓴다 (v1.3.10).
+  Firebase SDK 를 다시 들이지 말 것 — 팝업이 필요 없어 REST 로 충분하고,
+  SDK 를 쓰면 112KB 가 늘 뿐 아니라 iOS 사파리의 팝업·ITP 문제가 되살아난다
+* PIN 을 4자리로 줄이지 말 것. Firebase 비밀번호 최소 길이가 6자라 뒤에 뭔가
+  덧붙여야 하는데, 그러면 Firebase 재설정 페이지가 정한 새 비밀번호와 어긋나
+  "PIN 찾기" 가 깨진다

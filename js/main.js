@@ -226,12 +226,12 @@ function startTitleScene() {
 
 /** 변경 이력 화면 : 1.0.0 부터의 기능 추가/개선 내역 */
 // ============================================================
-//  계정 — 게스트 / 구글 로그인
+//  계정 — 게스트 / 이메일+PIN 로그인
 // ============================================================
 /** 지금 모드에 맞춰 이어하기 저장 키를 맞추고 타이틀 표시를 갱신한다 */
 function applyAccount() {
   const a = Account.state();
-  setSaveKey(Account.saveKeyOf(a.mode === 'google' ? a.uid : null));
+  setSaveKey(Account.saveKeyOf(a.mode === 'user' ? a.uid : null));
   renderAccountChip();
   const btn = $('#btn-continue');
   if (btn) { let has = false; try { has = !!localStorage.getItem(getSaveKey()); } catch (e) { /* noop */ }
@@ -242,7 +242,7 @@ function renderAccountChip() {
   const chip = $('#btn-profile');
   if (!chip) return;
   const a = Account.state();
-  const signed = a.mode === 'google';
+  const signed = a.mode === 'user';
   const label = signed ? (a.name || '플레이어') : '게스트';
   const icon = signed ? 'crown' : 'foot';
   const color = signed ? '#e8c34a' : '#8b83a0';
@@ -253,7 +253,7 @@ function renderAccountChip() {
   const hint = $('#login-hint');
   if (hint) {
     hint.hidden = signed;
-    hint.textContent = '눌러서 구글로 로그인하면 전적이 남습니다';
+    hint.textContent = '눌러서 계정을 만들면 전적이 남습니다';
   }
 }
 
@@ -262,13 +262,6 @@ function escapeHtml(t) {
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function signInErrorText(reason) {
-  if (reason === 'not-enabled') return 'Firebase 콘솔에서 구글 로그인이 아직 켜져 있지 않습니다.';
-  if (reason === 'popup-blocked') return '팝업이 차단됐습니다. 브라우저 설정에서 허용해 주세요.';
-  if (reason === 'unauthorized-domain') return '이 주소는 Firebase 승인된 도메인에 등록돼 있지 않습니다.';
-  if (reason === 'network') return '네트워크에 연결할 수 없습니다.';
-  return '로그인에 실패했습니다. 게스트로도 바로 즐기실 수 있습니다.';
-}
 
 /** 로그인 직후 : 서버 전적을 맞추고, 예전 로컬 기록이 있으면 한 번 물어본다 */
 async function afterSignIn() {
@@ -296,17 +289,87 @@ async function afterSignIn() {
   });
 }
 
-/** 계정 화면 */
-function showAccount() {
+/** 로그인 오류를 사람이 읽을 말로 */
+function signInErrorText(reason) {
+  return {
+    'not-enabled': 'Firebase 콘솔에서 이메일 로그인이 아직 켜져 있지 않습니다.',
+    'email-exists': '이미 가입된 이메일입니다. "이미 계정이 있어요" 로 들어가세요.',
+    'bad-email': '이메일 주소를 다시 확인해 주세요.',
+    'weak-pin': `PIN 은 숫자 ${Account.PIN_LEN}자리여야 합니다.`,
+    'no-account': '가입되지 않은 이메일입니다.',
+    'wrong-pin': '이메일 또는 PIN 이 맞지 않습니다.',
+    'disabled': '사용이 중지된 계정입니다.',
+    'too-many': '시도가 너무 잦습니다. 잠시 뒤에 다시 해 주세요.',
+    network: '네트워크에 연결할 수 없습니다.',
+  }[reason] || '로그인에 실패했습니다. 게스트로도 바로 즐기실 수 있습니다.';
+}
+
+/** 이메일 + PIN 입력 폼. mode 는 'in'(로그인) 또는 'up'(가입) */
+function authForm(body, mode, onDone) {
+  const up = mode === 'up';
+  const email = el('input', { class: 'name-input', type: 'email', inputmode: 'email',
+    autocomplete: 'email', autocapitalize: 'off', spellcheck: 'false', placeholder: '이메일' });
+  const pin = el('input', { class: 'name-input pin-input', type: 'password', inputmode: 'numeric',
+    autocomplete: up ? 'new-password' : 'current-password', maxlength: String(Account.PIN_LEN),
+    pattern: '\\d*', placeholder: `PIN 숫자 ${Account.PIN_LEN}자리` });
+  // 숫자만 받는다 — 폰에서 숫자판이 뜨고 실수로 글자가 섞이지 않는다
+  pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, Account.PIN_LEN); });
+  const err = el('div', { class: 'form-err' });
+  const btn = el('button', { class: 'btn gold', text: up ? '가입하고 시작' : '로그인' });
+
+  const go = async () => {
+    err.textContent = '';
+    btn.disabled = true;
+    const r = up ? await Account.signUp(email.value, pin.value)
+                 : await Account.signIn(email.value, pin.value);
+    btn.disabled = false;
+    if (r.ok) { SFX.relic(); applyAccount(); await afterSignIn(); onDone(); return; }
+    err.textContent = signInErrorText(r.reason);
+  };
+  btn.addEventListener('click', () => { SFX.tap(); go(); });
+  pin.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+  body.append(
+    el('p', { class: 'auth-lead', text: up
+      ? `이메일과 숫자 ${Account.PIN_LEN}자리만 정하면 됩니다. 비밀번호를 따로 만들지 않습니다.`
+      : '가입할 때 쓴 이메일과 PIN 을 넣어 주세요.' }),
+    email, pin, btn, err,
+  );
+
+  if (up) {
+    body.append(el('button', { class: 'btn ghost', text: '이미 계정이 있어요',
+      onclick: () => { SFX.tap(); showAccount('in'); } }));
+  } else {
+    body.append(
+      el('button', { class: 'btn ghost', text: '계정 새로 만들기',
+        onclick: () => { SFX.tap(); showAccount('up'); } }),
+      el('button', { class: 'link-btn', text: 'PIN 을 잊었어요',
+        onclick: async (e) => {
+          SFX.tap();
+          if (!Account.isValidEmail(email.value)) { err.textContent = '먼저 이메일을 넣어 주세요.'; return; }
+          e.currentTarget.disabled = true;
+          const r = await Account.sendPinReset(email.value);
+          e.currentTarget.disabled = false;
+          err.textContent = r.ok ? '' : signInErrorText(r.reason);
+          if (r.ok) toast('재설정 메일을 보냈습니다. 메일에서 새 PIN 을 정해 주세요.');
+        } }),
+    );
+  }
+  setTimeout(() => { try { (email.value ? pin : email).focus(); } catch (e) { /* noop */ } }, 60);
+}
+
+/** 계정 화면. form 은 'in' | 'up' — 게스트일 때 어느 폼을 보여 줄지 */
+function showAccount(form) {
   const body = $('#profile-body');
   body.innerHTML = '';
   const a = Account.state();
 
-  if (a.mode === 'google') {
+  if (a.mode === 'user') {
     const st = Account.Records.stats();
     const card = el('div', { class: 'acct-card' });
     card.innerHTML = `<div class="acct-ico">${svgIcon('crown', { size: 20, color: '#e8c34a' })}</div>`
       + `<div><b>${escapeHtml(a.name || '플레이어')}</b>`
+      + `<small>${escapeHtml(a.email || '')}</small>`
       + `<small>${st.total}판 · 클리어 ${st.wins}회</small></div>`;
     body.append(card);
     body.append(el('button', { class: 'btn', text: '전적 보기',
@@ -321,17 +384,8 @@ function showAccount() {
       + `<div><b>게스트</b><small>전적이 남지 않습니다</small></div>`;
     body.append(card);
     body.append(el('p', { class: 'rel-foot',
-      text: '구글로 로그인하면 이때부터의 전적이 계정에 쌓이고, 기기를 바꾸거나 브라우저가 저장 공간을 비워도 그대로 돌아옵니다.' }));
-    const btn = el('button', { class: 'btn gold', text: '구글로 로그인' });
-    const err = el('div', { class: 'form-err' });
-    btn.addEventListener('click', async () => {
-      SFX.tap(); btn.disabled = true;
-      const r = await Account.signIn();
-      btn.disabled = false;
-      if (r.ok) { applyAccount(); await afterSignIn(); showAccount(); return; }
-      if (r.reason !== 'cancelled') err.textContent = signInErrorText(r.reason);
-    });
-    body.append(btn, err);
+      text: '계정을 만들면 이때부터의 전적이 쌓이고, 기기를 바꾸거나 브라우저가 저장 공간을 비워도 그대로 돌아옵니다.' }));
+    authForm(body, form === 'in' ? 'in' : 'up', () => showAccount());
   }
   body.scrollTop = 0;
   showScreen('scr-profile');

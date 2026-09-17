@@ -5,12 +5,17 @@
 //    남길 수가 없어서다 — 브라우저가 저장소를 비우면 "이 사람이 누구였는지" 알 방법이
 //    없다. (v1.3.2 의 익명 인증 백업이 바로 그 이유로 실패했다.)
 //
-//  ▸ 구글 로그인 : uid 가 신원이 된다. 전적은 Firestore 에 uid 로 저장한다.
+//  ▸ 로그인 : 이메일 + 6자리 PIN. uid 가 신원이 된다.
 //    브라우저가 저장소를 비워도 다시 로그인하면 같은 uid 라 기록이 그대로 돌아온다.
-//    이게 익명 인증과 결정적으로 다른 점이다 — 신원이 기기 밖(구글 계정)에 있다.
+//    이게 익명 인증과 결정적으로 다른 점이다 — 신원이 기기 밖(사용자의 머릿속과
+//    이메일함)에 있다. PIN 을 잊어도 재설정 메일로 되찾을 수 있다.
 //
-//  ▸ 로그인 SDK 는 "구글로 로그인" 을 누르는 순간에만 import() 한다.
-//    게스트로 노는 사람은 한 바이트도 받지 않는다.
+//  ▸ PIN 이 6자리인 이유 : Firebase 의 비밀번호 최소 길이가 6자다.
+//    4자리를 쓰려면 뒤에 뭔가 덧붙여야 하는데, 그러면 Firebase 의 재설정 페이지에서
+//    사용자가 정한 새 비밀번호와 규칙이 어긋나 복구가 깨진다.
+//
+//  ▸ SDK 를 쓰지 않는다 — 이메일/비밀번호는 팝업이 필요 없어 REST 로 끝난다.
+//    덕분에 내려받을 것이 0 이고, iOS 사파리의 팝업·ITP 문제도 생기지 않는다.
 //
 //  ▸ 통신이 안 되면 전적만 못 쌓일 뿐, 게임은 평소대로 돌아간다.
 //    여기서 난 예외가 밖으로 새어 게임을 막는 일이 없어야 한다.
@@ -23,7 +28,7 @@ const CFG = {
   projectId: 'cnation-project',
 };
 
-const MODE_KEY = 'cnation_sts_mode_v1';      // { mode, uid, name, photo }
+const MODE_KEY = 'cnation_sts_mode_v2';      // { mode, uid, email, refreshToken }
 const CACHE_KEY = (uid) => `cnation_sts_runs_${uid}`;
 export const GUEST_SAVE_KEY = 'cnation_sts_save_guest';
 export const saveKeyOf = (uid) => (uid ? `cnation_sts_save_${uid}` : GUEST_SAVE_KEY);
@@ -39,17 +44,18 @@ const docUrl = (uid) =>
 //  상태
 // ---------------------------------------------------------------
 const S = {
-  mode: 'none',        // 'none' 아직 고르지 않음 | 'guest' | 'google'
+  mode: 'none',        // 'none' 아직 고르지 않음 | 'guest' | 'user'
   uid: null,
+  email: null,
   name: null,
-  photo: null,
   /** 'idle' | 'working' | 'ok' | 'error' */
   sync: 'idle',
   syncError: null,
   lastSyncAt: 0,
 };
-let auth = null;          // Firebase Auth 인스턴스 (로그인을 시도한 뒤에만 생긴다)
-let idToken = null;
+let idToken = null;       // 한 시간짜리 — 메모리에만 둔다
+let tokenExpiry = 0;
+let refreshToken = null;  // 이건 localStorage 에 둔다 (저장소가 비면 다시 로그인하면 된다)
 let pushTimer = null;
 let pushing = false;
 let dirty = false;
@@ -59,7 +65,7 @@ export function onAccountChange(fn) { listeners.push(fn); }
 function emit() { listeners.forEach((f) => { try { f(state()); } catch (e) { /* noop */ } }); }
 export function state() { return { ...S }; }
 export const isGuest = () => S.mode === 'guest';
-export const isSignedIn = () => S.mode === 'google' && !!S.uid;
+export const isSignedIn = () => S.mode === 'user' && !!S.uid;
 
 // ---------------------------------------------------------------
 //  저수준
@@ -74,7 +80,7 @@ function write(key, val) {
 }
 
 function saveMode() {
-  write(MODE_KEY, { mode: S.mode, uid: S.uid, name: S.name, photo: S.photo });
+  write(MODE_KEY, { mode: S.mode, uid: S.uid, email: S.email, refreshToken });
 }
 
 /** 응답이 없어도 영원히 매달리지 않도록 시간 제한을 건다 */
@@ -98,23 +104,17 @@ async function req(url, opts = {}) {
 function setSync(sync, error = null) { S.sync = sync; S.syncError = error; emit(); }
 
 // ---------------------------------------------------------------
-//  로그인
+//  로그인 — 이메일 + 6자리 PIN (Firebase Auth REST)
 // ---------------------------------------------------------------
-let sdkPromise = null;
-/** SDK 는 로그인이 필요해진 순간에만 불러온다 (게스트는 받지 않는다) */
-function loadSdk() {
-  if (!sdkPromise) sdkPromise = import('../vendor/firebase-auth.js');
-  return sdkPromise;
-}
+const AUTH = (m) => `https://identitytoolkit.googleapis.com/v1/accounts:${m}?key=${CFG.apiKey}`;
+const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${CFG.apiKey}`;
 
-async function ensureAuth() {
-  if (auth) return auth;
-  const m = await loadSdk();
-  const app = m.initializeApp(CFG);
-  auth = m.getAuth(app);
-  auth.useDeviceLanguage?.();
-  return auth;
-}
+export const PIN_LEN = 6;
+export const isValidPin = (p) => new RegExp(`^\\d{${PIN_LEN}}$`).test(String(p || ''));
+export const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim());
+
+/** 이메일에서 화면에 쓸 이름을 뽑는다 (앞부분만) */
+const nameFromEmail = (e) => String(e || '').split('@')[0].slice(0, 14) || '플레이어';
 
 /**
  * 게스트로 하던 진행 중인 런을 로그인한 계정으로 옮긴다.
@@ -132,67 +132,110 @@ function adoptGuestSave(uid) {
   } catch (e) { return false; }
 }
 
-function applyUser(u) {
-  adoptGuestSave(u.uid);
-  S.mode = 'google';
-  S.uid = u.uid;
-  S.name = u.displayName || '플레이어';
-  S.photo = u.photoURL || null;
+/** 로그인 응답을 받아 상태에 앉힌다 */
+function applyAuth(r, email) {
+  adoptGuestSave(r.localId);
+  idToken = r.idToken;
+  tokenExpiry = Date.now() + (Number(r.expiresIn) || 3600) * 1000;
+  refreshToken = r.refreshToken;
+  S.mode = 'user';
+  S.uid = r.localId;
+  S.email = email || r.email || '';
+  S.name = nameFromEmail(S.email);
   saveMode();
   emit();
 }
 
-/**
- * 구글 계정으로 로그인한다.
- * @returns {Promise<{ok: boolean, reason?: string}>}
- */
-export async function signIn() {
+/** Firebase 가 주는 오류 코드를 사람이 읽을 말로 */
+function authReason(msg) {
+  const m = String(msg || '');
+  if (/CONFIGURATION_NOT_FOUND|OPERATION_NOT_ALLOWED/.test(m)) return 'not-enabled';
+  if (/EMAIL_EXISTS/.test(m)) return 'email-exists';
+  if (/INVALID_EMAIL/.test(m)) return 'bad-email';
+  if (/WEAK_PASSWORD/.test(m)) return 'weak-pin';
+  if (/EMAIL_NOT_FOUND/.test(m)) return 'no-account';
+  if (/INVALID_PASSWORD|INVALID_LOGIN_CREDENTIALS/.test(m)) return 'wrong-pin';
+  if (/USER_DISABLED/.test(m)) return 'disabled';
+  if (/TOO_MANY_ATTEMPTS/.test(m)) return 'too-many';
+  if (/Failed to fetch|NetworkError|aborted/i.test(m)) return 'network';
+  return m || 'unknown';
+}
+
+async function authCall(method, body, email) {
   try {
-    const m = await loadSdk();
-    const a = await ensureAuth();
-    const provider = new m.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    const res = await m.signInWithPopup(a, provider);
-    idToken = await res.user.getIdToken();
-    applyUser(res.user);
+    const r = await req(AUTH(method), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, returnSecureToken: true }),
+    });
+    applyAuth(r, email);
     return { ok: true };
   } catch (e) {
-    const code = e && (e.code || e.message) ? String(e.code || e.message) : 'unknown';
-    // 사용자가 팝업을 그냥 닫은 건 오류가 아니다
-    if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/.test(code)) {
-      return { ok: false, reason: 'cancelled' };
-    }
-    console.warn('구글 로그인 실패', e);
-    if (/configuration-not-found|operation-not-allowed/.test(code)) {
-      return { ok: false, reason: 'not-enabled' };
-    }
-    if (/popup-blocked/.test(code)) return { ok: false, reason: 'popup-blocked' };
-    if (/unauthorized-domain/.test(code)) return { ok: false, reason: 'unauthorized-domain' };
-    if (/network/.test(code)) return { ok: false, reason: 'network' };
-    return { ok: false, reason: code };
+    console.warn('로그인 실패', e);
+    return { ok: false, reason: authReason(e.message) };
   }
 }
 
-export async function signOutNow() {
-  try { if (auth) { const m = await loadSdk(); await m.signOut(auth); } }
-  catch (e) { /* 실패해도 로컬 상태는 내린다 */ }
-  idToken = null;
-  S.mode = 'guest'; S.uid = null; S.name = null; S.photo = null;
+/** 새 계정 만들기 */
+export function signUp(email, pin) {
+  const e = String(email || '').trim();
+  if (!isValidEmail(e)) return Promise.resolve({ ok: false, reason: 'bad-email' });
+  if (!isValidPin(pin)) return Promise.resolve({ ok: false, reason: 'weak-pin' });
+  return authCall('signUp', { email: e, password: String(pin) }, e);
+}
+
+/** 기존 계정으로 들어가기 */
+export function signIn(email, pin) {
+  const e = String(email || '').trim();
+  if (!isValidEmail(e)) return Promise.resolve({ ok: false, reason: 'bad-email' });
+  if (!isValidPin(pin)) return Promise.resolve({ ok: false, reason: 'weak-pin' });
+  return authCall('signInWithPassword', { email: e, password: String(pin) }, e);
+}
+
+/** PIN 을 잊었을 때 — 재설정 메일을 보낸다 */
+export async function sendPinReset(email) {
+  const e = String(email || '').trim();
+  if (!isValidEmail(e)) return { ok: false, reason: 'bad-email' };
+  try {
+    await req(AUTH('sendOobCode'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestType: 'PASSWORD_RESET', email: e }),
+    });
+    return { ok: true };
+  } catch (err) {
+    console.warn('재설정 메일 실패', err);
+    return { ok: false, reason: authReason(err.message) };
+  }
+}
+
+export function signOutNow() {
+  idToken = null; refreshToken = null; tokenExpiry = 0;
+  S.mode = 'guest'; S.uid = null; S.email = null; S.name = null;
   S.sync = 'idle'; S.syncError = null;
   saveMode();
   emit();
+  return Promise.resolve();
 }
 
 export function chooseGuest() {
-  S.mode = 'guest'; S.uid = null; S.name = null; S.photo = null;
+  S.mode = 'guest'; S.uid = null; S.email = null; S.name = null;
   saveMode();
   emit();
 }
 
-/** 토큰은 한 시간이면 만료된다 — 쓸 때마다 SDK 에게 새로 받는다 */
+/** 토큰은 한 시간이면 만료된다 — refreshToken 으로 새로 받는다 */
 async function token() {
-  if (!auth || !auth.currentUser) throw new Error('로그인 상태가 아닙니다');
-  idToken = await auth.currentUser.getIdToken();
+  if (idToken && Date.now() < tokenExpiry - 60000) return idToken;
+  if (!refreshToken) throw new Error('로그인 상태가 아닙니다');
+  const r = await req(REFRESH_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+  });
+  idToken = r.id_token;
+  tokenExpiry = Date.now() + (Number(r.expires_in) || 3600) * 1000;
+  if (r.refresh_token) { refreshToken = r.refresh_token; saveMode(); }
   return idToken;
 }
 
@@ -223,7 +266,7 @@ async function push(uid, rows) {
     body: JSON.stringify({
       fields: {
         runs: { stringValue: JSON.stringify(rows) },
-        name: { stringValue: S.name || '' },
+        email: { stringValue: S.email || '' },
         at: { integerValue: String(Date.now()) },
         ver: { stringValue: VERSION },
       },
@@ -374,9 +417,9 @@ function computeStats(all) {
 /**
  * 부팅 시 1회.
  * 저장된 모드를 되살린다. 게스트면 할 일이 없고,
- * 구글이었으면 SDK 로 로그인 상태를 되찾아 전적을 맞춘다.
+ * 로그인해 두었으면 토큰을 갱신해 전적을 맞춘다.
  *
- * @returns {Promise<'none'|'guest'|'google'>} 정해진 모드
+ * @returns {Promise<'none'|'guest'|'user'>} 정해진 모드
  */
 export async function init() {
   const saved = read(MODE_KEY, null);
@@ -384,35 +427,35 @@ export async function init() {
 
   if (saved.mode === 'guest') { S.mode = 'guest'; emit(); return 'guest'; }
 
-  // 지난번에 구글로 로그인했었다 — 화면은 먼저 그 이름으로 그려 두고,
-  // 실제 로그인 상태 확인은 뒤따라온다 (SDK 를 받아야 해서 시간이 걸린다).
-  S.mode = 'google'; S.uid = saved.uid; S.name = saved.name; S.photo = saved.photo;
+  // 지난번에 로그인해 두었다 — 화면은 먼저 그 이름으로 그려 두고,
+  // 토큰 갱신은 뒤따라온다. 실패해도 게임 시작을 막지 않는다.
+  S.mode = 'user'; S.uid = saved.uid; S.email = saved.email;
+  S.name = nameFromEmail(saved.email);
+  refreshToken = saved.refreshToken || null;
   emit();
 
+  if (!refreshToken) { setSync('error', 'signed-out'); return 'user'; }
   try {
-    const m = await loadSdk();
-    const a = await ensureAuth();
-    const user = await new Promise((res) => {
-      const off = m.onAuthStateChanged(a, (u) => { off(); res(u); }, () => { off(); res(null); });
-    });
-    if (user) { applyUser(user); await Records.sync(); }
-    else {
-      // 로그인이 풀렸다 (브라우저가 저장소를 비웠을 수 있다).
-      // 기록은 서버에 그대로 있으니, 다시 로그인하면 돌아온다.
-      S.mode = 'google'; S.uid = saved.uid;      // 이름은 그대로 두고 표시만 유지
-      setSync('error', 'signed-out');
-    }
+    await token();                 // 토큰이 살아 있는지 확인
+    await Records.sync();
   } catch (e) {
-    setSync('error', e.message || String(e));
+    // 토큰이 못 쓰게 됐으면 다시 로그인하면 된다. 기록은 서버에 그대로 있다.
+    if (/INVALID_REFRESH_TOKEN|TOKEN_EXPIRED|USER_NOT_FOUND|USER_DISABLED/.test(String(e.message))) {
+      refreshToken = null; saveMode();
+      setSync('error', 'signed-out');
+    } else {
+      setSync('error', e.message || String(e));
+    }
     console.warn('로그인 상태 확인 실패 (게임에는 영향 없음)', e);
   }
-  return 'google';
+  return 'user';
 }
 
 /** 화면을 벗어날 때 밀린 것을 올려 본다 */
 document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) flush(); });
 
 export const Account = {
-  init, state, signIn, signOut: signOutNow, chooseGuest,
+  init, state, signUp, signIn, sendPinReset, signOut: signOutNow, chooseGuest,
   isGuest, isSignedIn, onAccountChange, Records, saveKeyOf, GUEST_SAVE_KEY,
+  PIN_LEN, isValidPin, isValidEmail,
 };
