@@ -58,7 +58,10 @@ fonts/                     웹폰트 woff2 조각 189개 (1.5MB) + OFL.txt
 tools/fetch-fonts.py       폰트 꾸러미 생성기 (폰트를 새로 올릴 때만 실행)
 js/version.js              ★ 버전 (수정 요청 시 여기부터 올린다)
 js/main.js                 컨트롤러 : 화면 전환, 전투 UI, 보상/상점/이벤트/모닥불
-js/profile.js              계정(최대 5개) + 계정별 저장 키 · 런 기록/통계 (localStorage)
+js/account.js              계정 : 게스트 / 구글 로그인, uid 기준 Firestore 전적 (REST)
+js/legacy.js               v1.3.x 로컬 5계정 잔재를 첫 로그인 때 한 번 들여오기
+vendor/firebase-auth.js    Firebase Auth 자체 번들 (tools/build-firebase.sh 가 생성)
+firestore.rules            Firestore 보안 규칙 (콘솔에 붙여 넣는 용도)
 js/audio.js                합성 효과음 + 소리 설정(효과음·배경음 on/off, 음량) 저장
 js/bgm.js                  배경음악 : 화면별 곡 지정 · 크로스페이드 · 전투곡 랜덤
 audio/                     배경음악 mp3 15곡 (128kbps)
@@ -119,7 +122,12 @@ python3 -m http.server 8099
 * 새 카드를 추가하면 `js/ui/cardview.js` 의 `ART` 맵에 문양을 반드시 매핑할 것 (누락 시 기본 문양으로 표시)
 * 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/icons.js` 의 `POWER_GLYPH` 에 아이콘 매핑
 * Slay the Spire 는 Mega Crit 저작물 — 비영리 팬 프로젝트로만 유지, 원작 에셋 반입 금지
-* **클라우드 백업을 다시 시도하지 말 것** (v1.3.2 에서 넣었다가 v1.3.4 에서 철회).
+* **익명 인증 백업을 다시 시도하지 말 것** (v1.3.2 에서 넣었다가 v1.3.4 에서 철회).
   익명 인증의 토큰이 계정 데이터와 같은 localStorage 에 있어, 저장소가 지워지면
   신원도 함께 날아가 새 uid 가 발급된다 → 예전 백업을 영영 못 찾는다.
-  진짜 로그인 없이는 성립하지 않는다. ITP 대비는 "홈 화면에 추가(PWA 설치)" 안내가 답이다
+  v1.3.5 의 구글 로그인이 이 문제의 답이다 — 신원이 기기 밖에 있어 다시 로그인하면
+  같은 uid 가 나온다. 전적을 남기려면 로그인이 필요하고, 게스트는 전적을 남기지 않는다
+* 전적 기능을 건드릴 때 : 게스트(`Account.isGuest()`)에서는 `Records.add` 가 아무것도 하지
+  않는다. 게스트에게 전적이 쌓이는 것처럼 보이는 UI 를 만들지 말 것
+* Firebase SDK 는 "구글로 로그인" 을 누를 때만 `import()` 한다. 최상단에서 import 하면
+  게스트도 33KB 를 받게 되므로 그렇게 바꾸지 말 것

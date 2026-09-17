@@ -4,8 +4,9 @@
 import { $, $$, el, sleep, clamp } from './util.js';
 import { VERSION } from './version.js';
 import { CHANGELOG } from './data/changelog.js';
-import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, setSaveKey, ACT_RANGES } from './engine/run.js';
-import { Profiles, Records, MAX_PROFILES, MAX_NAME, saveKeyOf, cleanName } from './profile.js';
+import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, setSaveKey, getSaveKey, ACT_RANGES } from './engine/run.js';
+import { Account } from './account.js';
+import * as Legacy from './legacy.js';
 import { Battle } from './engine/battle.js';
 import { POWERS, powerName, powerDesc } from './engine/powers.js';
 import { CARD_DEFS, Card, mk, TYPE_KR, RARITY_KR } from './data/cards.js';
@@ -49,9 +50,7 @@ window.__afterBoss = () => afterBoss();                                     // �
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex', 'scr-profile', 'scr-stats', 'scr-modal'];
 function showScreen(id) {
   if (id !== 'scr-modal') clearModal();
-  if (id === 'scr-title') { BGM.play('title'); renderProfileChip();
-    const c = $('#btn-continue'); const a = Profiles.active();
-    if (c) c.disabled = !(a && Profiles.hasSave(a.id)); }
+  if (id === 'scr-title') { BGM.play('title'); applyAccount(); }
   SCREENS.forEach((s) => { const e = $('#' + s); if (e) e.hidden = s !== id; });
   if (id === 'scr-title') requestAnimationFrame(() => { try { T3.resizeTitle(); } catch (e) { /* noop */ } });
 }
@@ -167,10 +166,18 @@ function modalText(text) { return el('p', { class: 'modal-text', text }); }
 // ============================================================
 function initTitle() {
   startTitleScene();
-  // 계정 준비 : 예전 저장이 있으면 첫 계정으로 옮기고, 없으면 이름을 받는다
-  Profiles.migrateLegacy();
-  useProfile(Profiles.activeId());
-  if (!Profiles.count()) askFirstProfile();
+  // 계정 준비. 모드를 아직 안 골랐으면 물어본다.
+  // 로그인 확인은 SDK 를 받아야 해서 시간이 걸리지만 게임 시작을 막지 않는다.
+  Account.onAccountChange(() => {
+    applyAccount();
+    if (!$('#scr-profile').hidden) renderSyncLine();
+  });
+  Account.init().then((mode) => {
+    applyAccount();
+    if (mode === 'none') askMode();
+  }).catch(() => { applyAccount(); askMode(); });
+  // 계정을 나누기 전(v1.2 이하) 저장이 있으면 게스트 이어하기로 옮겨 준다
+  Legacy.adoptOldestSave(Account.GUEST_SAVE_KEY);
   BGM.play('title');
   BGM.prefetch('map');          // 새 게임을 누르면 바로 쓸 곡
   // 모바일은 첫 사용자 동작 전에는 소리를 못 낸다 — 타이틀 아무 곳이나 누르면 잠금을 푼다
@@ -187,7 +194,7 @@ function initTitle() {
   });
   $('#btn-new').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
-    if (!Profiles.count()) { askFirstProfile(() => newGame()); return; }
+    if (Account.state().mode === 'none') { askMode(() => newGame()); return; }
     newGame();
   });
   $('#btn-continue').addEventListener('click', () => {
@@ -201,10 +208,10 @@ function initTitle() {
   $('#btn-codex').addEventListener('click', () => { unlockAudio(); SFX.tap(); showCodex('card', 'red'); });
   $('#btn-profile').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
-    if (!Profiles.count()) askFirstProfile(); else showProfiles();
+    if (Account.state().mode === 'none') askMode(); else showAccount();
   });
   $('#btn-profile-close').addEventListener('click', () => { SFX.tap(); showScreen('scr-title'); });
-  $('#btn-stats-close').addEventListener('click', () => { SFX.tap(); showProfiles(); });
+  $('#btn-stats-close').addEventListener('click', () => { SFX.tap(); showAccount(); });
   const gear = $('#btn-settings-title');
   if (gear) {
     gear.innerHTML = svgIcon('gear', { size: 22, color: '#bdb4cf' });
@@ -221,124 +228,182 @@ function startTitleScene() {
 
 /** 변경 이력 화면 : 1.0.0 부터의 기능 추가/개선 내역 */
 // ============================================================
-//  계정(프로필) · 전적
+//  계정 — 게스트 / 구글 로그인
 // ============================================================
-/** 지금 계정에 맞춰 저장 키를 맞추고 타이틀 표시를 갱신한다 */
-function useProfile(id) {
-  if (id) Profiles.setActive(id);
-  const p = Profiles.active();
-  setSaveKey(p ? saveKeyOf(p.id) : null);
-  renderProfileChip();
+/** 지금 모드에 맞춰 이어하기 저장 키를 맞추고 타이틀 표시를 갱신한다 */
+function applyAccount() {
+  const a = Account.state();
+  setSaveKey(Account.saveKeyOf(a.mode === 'google' ? a.uid : null));
+  renderAccountChip();
   const btn = $('#btn-continue');
-  if (btn) btn.disabled = !(p && Profiles.hasSave(p.id));
-  return p;
+  if (btn) { let has = false; try { has = !!localStorage.getItem(getSaveKey()); } catch (e) { /* noop */ }
+    btn.disabled = !has; }
 }
 
-function renderProfileChip() {
+function renderAccountChip() {
   const chip = $('#btn-profile');
   if (!chip) return;
-  const p = Profiles.active();
-  chip.innerHTML = `<span class="pc-icon">${svgIcon('heart', { size: 13, color: '#8ab4e8' })}</span>`
-    + `<span class="pc-name">${p ? p.name : '계정 만들기'}</span>`
+  const a = Account.state();
+  const signed = a.mode === 'google';
+  const label = signed ? (a.name || '플레이어') : '게스트';
+  const icon = signed ? 'crown' : 'foot';
+  const color = signed ? '#e8c34a' : '#8b83a0';
+  chip.innerHTML = `<span class="pc-icon">${svgIcon(icon, { size: 13, color })}</span>`
+    + `<span class="pc-name">${escapeHtml(label)}</span>`
     + `<span class="pc-caret">▾</span>`;
 }
 
-/** 계정이 하나도 없을 때 — 이름을 받아 첫 계정을 만든다 */
-function askFirstProfile(after) {
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/** 맨 처음 — 게스트로 놀지, 구글로 로그인할지 고른다 */
+function askMode(after) {
   openModal((box) => {
-    const input = el('input', { class: 'name-input', type: 'text', maxlength: String(MAX_NAME),
-      placeholder: '이름을 입력하세요', autocomplete: 'off' });
     const err = el('div', { class: 'form-err' });
-    const submit = () => {
-      const name = cleanName(input.value);
-      if (!name) { err.textContent = '이름을 입력해 주세요.'; return; }
-      const p = Profiles.create(name);
-      if (!p) { err.textContent = '이미 있는 이름입니다.'; return; }
-      SFX.relic();
-      closeModal();
-      useProfile(p.id);
-      if (after) after(p);
+    const go = async (btn) => {
+      btn.disabled = true;
+      const r = await Account.signIn();
+      btn.disabled = false;
+      if (r.ok) { closeModal(); applyAccount(); await afterSignIn(); if (after) after(); return; }
+      if (r.reason === 'cancelled') return;              // 사용자가 닫았다 — 조용히
+      err.textContent = signInErrorText(r.reason);
     };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
     box.append(
-      modalTitle('계정 만들기'),
-      modalText('기록과 전적이 계정별로 따로 저장됩니다.\n한 기기에 최대 ' + MAX_PROFILES + '개까지 만들 수 있습니다.'),
-      input, err,
-      el('div', { class: 'modal-actions' },
-        el('button', { class: 'btn gold', text: '만들기', onclick: submit })),
+      modalTitle('첨탑에 오르기 전에'),
+      modalText('구글로 로그인하면 전적이 남고 기기를 바꿔도 따라옵니다.\n게스트로도 바로 즐길 수 있지만 전적은 남지 않습니다.'),
+      el('div', { class: 'mode-list' },
+        el('button', { class: 'btn gold mode-btn', onclick: (e) => go(e.currentTarget),
+          html: `<b>구글로 로그인</b><small>전적 · 통계가 쌓이고 계정에 저장됩니다</small>` }),
+        el('button', { class: 'btn ghost mode-btn', onclick: () => {
+          SFX.tap(); Account.chooseGuest(); closeModal(); applyAccount(); if (after) after();
+        }, html: `<b>게스트로 시작</b><small>바로 시작 · 전적은 남지 않습니다</small>` })),
+      err,
     );
-    setTimeout(() => { try { input.focus(); } catch (e) { /* noop */ } }, 60);
   });
 }
 
-function showProfiles() {
+function signInErrorText(reason) {
+  if (reason === 'not-enabled') return 'Firebase 콘솔에서 구글 로그인이 아직 켜져 있지 않습니다.';
+  if (reason === 'popup-blocked') return '팝업이 차단됐습니다. 브라우저 설정에서 허용해 주세요.';
+  if (reason === 'unauthorized-domain') return '이 주소는 Firebase 승인된 도메인에 등록돼 있지 않습니다.';
+  if (reason === 'network') return '네트워크에 연결할 수 없습니다.';
+  return '로그인에 실패했습니다. 게스트로도 바로 즐기실 수 있습니다.';
+}
+
+/** 로그인 직후 : 서버 전적을 맞추고, 예전 로컬 기록이 있으면 한 번 물어본다 */
+async function afterSignIn() {
+  await Account.Records.sync();
+  const { rows, profiles } = Legacy.collect();
+  if (!rows.length) { Legacy.markSettled(); return; }
+  await new Promise((done) => {
+    openModal((box) => {
+      box.append(
+        modalTitle('이 기기에 남아 있던 기록'),
+        modalText(`예전 방식으로 저장된 계정 ${profiles}개에 전적 ${rows.length}판이 남아 있습니다.\n`
+          + `지금 로그인한 계정으로 가져올까요?`),
+        el('div', { class: 'modal-actions' },
+          el('button', { class: 'btn gold', text: '가져오기', onclick: async (e) => {
+            e.currentTarget.disabled = true;
+            await Account.Records.importRows(rows);
+            Legacy.cleanup();
+            closeModal(); toast(`전적 ${rows.length}판을 가져왔습니다.`); done();
+          } }),
+          el('button', { class: 'btn ghost', text: '버리기', onclick: () => {
+            Legacy.cleanup(); closeModal(); done();
+          } })),
+      );
+    }, { stack: true });
+  });
+}
+
+/** 계정 화면 */
+function showAccount() {
   const body = $('#profile-body');
   body.innerHTML = '';
-  const activeId = Profiles.activeId();
+  const a = Account.state();
 
-  Profiles.all().forEach((p) => {
-    const st = Records.stats(p.id);
-    const row = el('div', { class: 'prof-row' + (p.id === activeId ? ' on' : '') });
-    const pick = el('button', { class: 'prof-pick' });
-    pick.innerHTML = `<b>${p.name}</b>`
-      + `<small>${st.total}판 · 클리어 ${st.wins}회`
-      + `${Profiles.hasSave(p.id) ? ' · 진행 중인 게임 있음' : ''}</small>`;
-    pick.addEventListener('click', () => {
-      SFX.tap();
-      useProfile(p.id);
-      showProfiles();
-    });
-    const stats = el('button', { class: 'prof-mini', title: '전적',
-      html: svgIcon('book', { size: 16, color: '#bdb4cf' }),
-      onclick: () => { SFX.tap(); showStats(p.id); } });
-    const trash = el('button', { class: 'prof-mini danger', title: '삭제',
-      html: svgIcon('trash', { size: 15, color: '#ff8a8a' }),
-      onclick: () => { SFX.tap(); confirmDeleteProfile(p); } });
-    row.append(pick, stats, trash);
-    body.appendChild(row);
-  });
-
-  if (Profiles.canCreate()) {
-    body.appendChild(el('button', { class: 'btn ghost', text: '+ 새 계정',
-      onclick: () => { SFX.tap(); askFirstProfile(() => showProfiles()); } }));
+  if (a.mode === 'google') {
+    const st = Account.Records.stats();
+    const card = el('div', { class: 'acct-card' });
+    card.innerHTML = `<div class="acct-ico">${svgIcon('crown', { size: 20, color: '#e8c34a' })}</div>`
+      + `<div><b>${escapeHtml(a.name || '플레이어')}</b>`
+      + `<small>${st.total}판 · 클리어 ${st.wins}회</small></div>`;
+    body.append(card);
+    body.append(el('button', { class: 'btn', text: '전적 보기',
+      onclick: () => { SFX.tap(); showStats(); } }));
+    body.append(el('button', { class: 'btn ghost', text: '로그아웃',
+      onclick: () => { SFX.tap(); confirmSignOut(); } }));
+    body.append(el('p', { class: 'cloud-line', id: 'cloud-line' }));
+    renderSyncLine();
   } else {
-    body.appendChild(el('p', { class: 'rel-foot', text: `계정은 최대 ${MAX_PROFILES}개까지 만들 수 있습니다.` }));
+    const card = el('div', { class: 'acct-card guest' });
+    card.innerHTML = `<div class="acct-ico">${svgIcon('foot', { size: 20, color: '#8b83a0' })}</div>`
+      + `<div><b>게스트</b><small>전적이 남지 않습니다</small></div>`;
+    body.append(card);
+    body.append(el('p', { class: 'rel-foot',
+      text: '구글로 로그인하면 이때부터의 전적이 계정에 쌓이고, 기기를 바꾸거나 브라우저가 저장 공간을 비워도 그대로 돌아옵니다.' }));
+    const btn = el('button', { class: 'btn gold', text: '구글로 로그인' });
+    const err = el('div', { class: 'form-err' });
+    btn.addEventListener('click', async () => {
+      SFX.tap(); btn.disabled = true;
+      const r = await Account.signIn();
+      btn.disabled = false;
+      if (r.ok) { applyAccount(); await afterSignIn(); showAccount(); return; }
+      if (r.reason !== 'cancelled') err.textContent = signInErrorText(r.reason);
+    });
+    body.append(btn, err);
   }
-  body.appendChild(el('p', { class: 'rel-foot',
-    text: '계정과 기록은 이 기기에만 저장됩니다.' }));
   body.scrollTop = 0;
   showScreen('scr-profile');
 }
 
-function confirmDeleteProfile(p) {
-  const st = Records.stats(p.id);
+function confirmSignOut() {
   openModal((box) => {
     box.append(
-      modalTitle('계정을 지울까요?'),
-      modalText(`"${p.name}" 계정과 그 계정의 전적 ${st.total}판, 진행 중인 게임이 모두 지워집니다.\n되돌릴 수 없습니다.`),
+      modalTitle('로그아웃할까요?'),
+      modalText('전적은 계정에 그대로 남아 있습니다.\n다시 로그인하면 돌아옵니다.\n로그아웃하면 게스트로 바뀌어 전적이 쌓이지 않습니다.'),
       el('div', { class: 'modal-actions' },
-        el('button', { class: 'btn danger', text: '지우기', onclick: () => {
-          SFX.tap();
-          const wasActive = Profiles.activeId() === p.id;
-          Profiles.remove(p.id);
-          closeModal();
-          if (wasActive) { G.run = null; G.battle = null; }
-          useProfile(Profiles.activeId());
-          if (!Profiles.count()) { showScreen('scr-title'); askFirstProfile(() => showProfiles()); }
-          else showProfiles();
+        el('button', { class: 'btn danger', text: '로그아웃', onclick: async () => {
+          SFX.tap(); await Account.signOut(); closeModal(); applyAccount(); showAccount();
         } }),
         el('button', { class: 'btn ghost', text: '취소', onclick: () => { SFX.tap(); closeModal(); } })),
     );
   }, { stack: true });
 }
 
+/** 계정 화면 맨 아래 : 서버와 맞춰졌는지 한 줄 */
+function renderSyncLine() {
+  const line = $('#cloud-line');
+  if (!line) return;
+  const a = Account.state();
+  let text; let cls = '';
+  if (a.sync === 'ok') text = `계정에 저장됨 (${fmtTimeAgo(a.lastSyncAt)})`;
+  else if (a.sync === 'working') text = '계정과 맞추는 중…';
+  else if (a.syncError === 'signed-out') { text = '로그인이 풀렸습니다 — 다시 로그인하면 전적이 돌아옵니다'; cls = ' warn'; }
+  else if (a.sync === 'error') { text = '지금은 계정에 못 올리고 있습니다 — 게임에는 지장 없고 나중에 다시 올립니다'; cls = ' warn'; }
+  else text = '대기 중';
+  line.className = 'cloud-line' + cls;
+  line.textContent = text;
+}
+
+function fmtTimeAgo(ts) {
+  if (!ts) return '-';
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return '방금';
+  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+  return `${Math.floor(s / 86400)}일 전`;
+}
+
+
 const RESULT_KR = { victory: '클리어', death: '사망', abandon: '포기' };
 
-function showStats(profileId) {
-  const p = Profiles.all().find((x) => x.id === profileId) || Profiles.active();
-  if (!p) return;
-  const st = Records.stats(p.id);
-  $('#stats-title').textContent = `${p.name} 전적`;
+function showStats() {
+  const a = Account.state();
+  const st = Account.Records.stats();
+  $('#stats-title').textContent = `${a.name || '플레이어'} 전적`;
   const body = $('#stats-body');
   body.innerHTML = '';
 
@@ -419,19 +484,18 @@ function fmtDate(ts) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** 한 판이 끝났을 때 기록을 남긴다 */
+/** 한 판이 끝났을 때 기록을 남긴다 (게스트면 Records.add 가 알아서 무시한다) */
 function recordRun(run, result) {
-  const pid = Profiles.activeId();
-  if (!pid || !run) return;
+  if (!run) return;
   // 숨겨진 시작 보너스를 쓴 판은 게임 테스트용이라 아예 남기지 않는다
   if (run.cheat) return;
   try {
-    Records.add(pid, {
+    Account.Records.add({
       char: run.charId, charName: run.charName, result,
       floor: run.floor, act: run.act,
       kills: run.stats.kills, elites: run.stats.elites, bosses: run.stats.bosses,
       deckSize: run.deck.length, relicCount: run.relics.length,
-      cheat: !!run.cheat, seed: run.seed, startedAt: run.startedAt,
+      seed: run.seed, startedAt: run.startedAt,
     });
   } catch (e) { console.warn('기록 저장 실패', e); }
 }
@@ -2587,7 +2651,7 @@ function showSettings() {
           if (!confirm('현재 런을 포기하고 타이틀로 돌아갈까요?')) return;
           recordRun(G.run, 'abandon');
           clearSave(); G.run = null; G.battle = null; stopOverlayLoop(); closeModal(); showScreen('scr-title');
-          useProfile(Profiles.activeId());
+          applyAccount();
         } }),
       );
     }
@@ -2626,7 +2690,7 @@ function gameOver() {
       modalText(`도달 층수 : ${run.floor}층 (${run.act}막)\n처치한 적 : ${run.stats.kills}\n엘리트 처치 : ${run.stats.elites}\n보스 처치 : ${run.stats.bosses}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '다시 도전', onclick: () => { closeModal(); newGame(); } }),
-        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); useProfile(Profiles.activeId()); } })),
+        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); applyAccount(); } })),
     );
   });
 }
@@ -2645,7 +2709,7 @@ function victory() {
       modalText(`50층의 최종 보스를 쓰러뜨렸습니다!\n\n남은 체력 : ${run.player.hp}/${run.player.maxHp}\n처치한 적 : ${run.stats.kills}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn gold', text: '새 게임', onclick: () => { closeModal(); newGame(); } }),
-        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); useProfile(Profiles.activeId()); } })),
+        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); applyAccount(); } })),
     );
   });
 }
