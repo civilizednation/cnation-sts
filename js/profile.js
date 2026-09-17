@@ -6,6 +6,7 @@
 // ============================================================
 
 const LIST_KEY = 'cnation_sts_profiles_v1';
+export const PROFILES_KEY = LIST_KEY;   // cloud.js 가 복구할 때 쓴다
 const OLD_SAVE_KEY = 'cnation_sts_save_v1';   // 계정 도입 전의 저장 (1회 이전한다)
 
 export const MAX_PROFILES = 5;
@@ -24,13 +25,19 @@ function write(key, val) {
 }
 function del(key) { try { localStorage.removeItem(key); } catch (e) { /* noop */ } }
 
+// 로컬이 바뀔 때마다 알려 준다 (cloud.js 가 듣고 백업을 올린다).
+// 여기 한 곳에서만 알리므로 호출부에서 빠뜨릴 일이 없다.
+const changeHooks = [];
+export function onProfileChange(fn) { changeHooks.push(fn); }
+function changed() { changeHooks.forEach((f) => { try { f(); } catch (e) { /* noop */ } }); }
+
 /** { list: [{ id, name, createdAt }], activeId } */
 function store() {
   const s = read(LIST_KEY, null);
   if (s && Array.isArray(s.list)) return s;
   return { list: [], activeId: null };
 }
-function commit(s) { write(LIST_KEY, s); }
+function commit(s) { write(LIST_KEY, s); changed(); }
 
 const newId = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -153,10 +160,11 @@ export const Records = {
     a.push(row);
     while (a.length > MAX_RECORDS) a.shift();
     write(runsKeyOf(profileId), a);
+    changed();
     return row;
   },
 
-  clear(profileId) { del(runsKeyOf(profileId)); },
+  clear(profileId) { del(runsKeyOf(profileId)); changed(); },
 
   /**
    * 통계 계산.

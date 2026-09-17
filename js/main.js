@@ -6,6 +6,7 @@ import { VERSION } from './version.js';
 import { CHANGELOG } from './data/changelog.js';
 import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, setSaveKey, ACT_RANGES } from './engine/run.js';
 import { Profiles, Records, MAX_PROFILES, MAX_NAME, saveKeyOf, cleanName } from './profile.js';
+import { Cloud } from './cloud.js';
 import { Battle } from './engine/battle.js';
 import { POWERS, powerName, powerDesc } from './engine/powers.js';
 import { CARD_DEFS, Card, mk, TYPE_KR, RARITY_KR } from './data/cards.js';
@@ -170,7 +171,13 @@ function initTitle() {
   // 계정 준비 : 예전 저장이 있으면 첫 계정으로 옮기고, 없으면 이름을 받는다
   Profiles.migrateLegacy();
   useProfile(Profiles.activeId());
-  if (!Profiles.count()) askFirstProfile();
+  // 클라우드 백업 — 계정이 하나도 없을 때만 되살릴 게 있는지 잠깐 기다린다.
+  // 실패하든 시간이 걸리든 게임 시작을 막지 않는다.
+  Cloud.init().then((restored) => {
+    if (restored) { useProfile(Profiles.activeId()); toast(`이전 기록 ${restored}개 계정을 되살렸습니다.`); }
+    if (!Profiles.count()) askFirstProfile();
+  }).catch(() => { if (!Profiles.count()) askFirstProfile(); });
+  Cloud.onCloudChange(() => { if (!$('#scr-profile').hidden) renderCloudLine(); });
   BGM.play('title');
   BGM.prefetch('map');          // 새 게임을 누르면 바로 쓸 곡
   // 모바일은 첫 사용자 동작 전에는 소리를 못 낸다 — 타이틀 아무 곳이나 누르면 잠금을 푼다
@@ -304,10 +311,34 @@ function showProfiles() {
   } else {
     body.appendChild(el('p', { class: 'rel-foot', text: `계정은 최대 ${MAX_PROFILES}개까지 만들 수 있습니다.` }));
   }
-  body.appendChild(el('p', { class: 'rel-foot',
-    text: '계정과 기록은 이 기기에만 저장됩니다.' }));
+  body.appendChild(el('p', { class: 'cloud-line', id: 'cloud-line' }));
+  renderCloudLine();
   body.scrollTop = 0;
   showScreen('scr-profile');
+}
+
+/** 계정 화면 맨 아래 : 저장 위치와 클라우드 백업 상태 한 줄 */
+function renderCloudLine() {
+  const line = $('#cloud-line');
+  if (!line) return;
+  const c = Cloud.state();
+  const base = '계정과 기록은 이 기기에 저장됩니다.';
+  let tail; let cls = '';
+  if (c.status === 'ok') tail = `클라우드에 백업됨 (${fmtTimeAgo(c.lastAt)})`;
+  else if (c.status === 'working') tail = '클라우드에 백업하는 중…';
+  else if (c.status === 'error') { tail = '클라우드 백업은 지금 쉬는 중 — 게임에는 지장 없습니다'; cls = ' warn'; }
+  else tail = '클라우드 백업 대기 중';
+  line.className = 'cloud-line' + cls;
+  line.textContent = `${base}\n${tail}`;
+}
+
+function fmtTimeAgo(ts) {
+  if (!ts) return '-';
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return '방금';
+  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+  return `${Math.floor(s / 86400)}일 전`;
 }
 
 function confirmDeleteProfile(p) {

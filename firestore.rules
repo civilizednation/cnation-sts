@@ -1,0 +1,16 @@
+// cnation STS — Firestore 보안 규칙
+//
+// Firebase 콘솔 → Firestore Database → 규칙 에 그대로 붙여 넣고 게시한다.
+// 익명 인증으로 받은 자기 uid 문서 한 개만 읽고 쓸 수 있다.
+// 다른 사람 백업은 읽을 수도 쓸 수도 없다.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /backups/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
