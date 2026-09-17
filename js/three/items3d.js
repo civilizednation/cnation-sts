@@ -3,7 +3,7 @@
 //  PNG 데이터 URL 로 돌려준다. (외부 이미지 0개 · 결과는 캐시)
 // ============================================================
 import * as THREE from 'three';
-import { buildPlayer } from './scene3d.js';
+import { buildPlayer, buildEnemy } from './scene3d.js';
 
 let renderer = null, scene = null, camera = null, ready = false, broken = false;
 const cache = new Map();
@@ -63,6 +63,11 @@ function bakeSized(group, w, h) {
   group.traverse((o) => { if (o.isMesh && !o.userData.noFit) box.expandByObject(o); });
   const c = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
+  // h 를 비우면 모델 생김새에 맞춰 틀을 정한다. 납작한 슬라임을 세로로 긴 틀에
+  // 담으면 위아래가 빈 채로 굽혀 화면에서 카드에 헛공간이 생긴다.
+  if (h == null) {
+    h = Math.round(w * Math.min(1.6, Math.max(0.62, size.y / Math.max(0.001, size.x))));
+  }
   const vFov = (36 * Math.PI / 180);
   const aspect = w / h;
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
@@ -589,6 +594,25 @@ export function characterPortrait3D(charId, model) {
     const { group } = buildPlayer(model);
     group.rotation.y = 0.42;
     url = bakeSized(group, 264, 396);
+  } catch (e) { url = null; }
+  cache.set(k, url);
+  return url;
+}
+
+/**
+ * 백과사전 몬스터 소개용 초상. 캐릭터와 같은 방식이지만 몬스터는 옆으로
+ * 퍼진 것(아가리·거대한 머리)부터 길쭉한 것(턱벌레)까지 폭이 넓어
+ * 조금 덜 길쭉한 틀(3:4)에 담아야 어느 쪽도 손해를 보지 않는다.
+ */
+export function monsterPortrait3D(mid, shape) {
+  if (!init()) return null;
+  const k = `mon:${mid}`;
+  if (cache.has(k)) return cache.get(k);
+  let url = null;
+  try {
+    const { group } = buildEnemy(shape);
+    group.rotation.y = 0.3;
+    url = bakeSized(group, 240, null);
   } catch (e) { url = null; }
   cache.set(k, url);
   return url;

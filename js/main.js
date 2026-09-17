@@ -19,6 +19,7 @@ import { rollNeowOptions, NEOW_SECRET } from './data/neow.js';
 import { BGM } from './bgm.js';
 import { STANCE_KR } from './engine/battle.js';
 import { MONSTERS } from './data/monsters.js';
+import { movesOf, whereText, monsterList, MONSTER_KIND_KR } from './data/monsterdex.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
 import * as I3 from './three/items3d.js';
@@ -778,14 +779,18 @@ function showHelp() {
 }
 
 // ============================================================
-//  백과사전 — 카드 / 유물 / 물약 / 캐릭터 / 용어
+//  백과사전 — 카드 / 유물 / 물약 / 몬스터 / 캐릭터 / 용어
 // ============================================================
 const CODEX_TABS = [
-  ['card', '카드'], ['relic', '유물'], ['potion', '물약'], ['char', '캐릭터'], ['word', '용어'],
+  ['card', '카드'], ['relic', '유물'], ['potion', '물약'],
+  ['monster', '몬스터'], ['char', '캐릭터'], ['word', '용어'],
 ];
 const CARD_GROUPS = [
   ['red', '아이언클래드'], ['green', '사일런트'], ['blue', '디펙트'],
   ['purple', '와쳐'], ['colorless', '무색'], ['curse', '상태·저주'],
+];
+const MONSTER_GROUPS = [
+  ['act1', '1막'], ['act2', '2막'], ['act3', '3막'], ['summon', '소환·분열'],
 ];
 const RELIC_GROUPS = [
   ['all', '전체'], ['starter', '시작'], ['common', '일반'],
@@ -811,14 +816,19 @@ function showCodex(tab, sub) {
   CODEX_TABS.forEach(([id, label]) => {
     tabs.appendChild(el('button', {
       class: 'cx-tab' + (codexTab === id ? ' on' : ''), text: label,
-      onclick: () => { SFX.tap(); showCodex(id, id === 'card' ? 'red' : id === 'relic' ? 'all' : ''); },
+      onclick: () => {
+        SFX.tap();
+        showCodex(id, id === 'card' ? 'red' : id === 'relic' ? 'all' : id === 'monster' ? 'act1' : '');
+      },
     }));
   });
 
   // 하위 분류 줄
   const subBar = $('#codex-sub');
   subBar.innerHTML = '';
-  const groups = codexTab === 'card' ? CARD_GROUPS : codexTab === 'relic' ? RELIC_GROUPS : null;
+  const groups = codexTab === 'card' ? CARD_GROUPS
+    : codexTab === 'relic' ? RELIC_GROUPS
+      : codexTab === 'monster' ? MONSTER_GROUPS : null;
   subBar.hidden = !groups;
   if (groups) {
     if (!groups.some(([g]) => g === codexSub)) codexSub = groups[0][0];
@@ -831,10 +841,12 @@ function showCodex(tab, sub) {
   }
 
   const body = $('#codex-body');
+  if (monsterWatcher) { monsterWatcher.disconnect(); monsterWatcher = null; }
   body.innerHTML = '';
   if (codexTab === 'card') codexCards(body);
   else if (codexTab === 'relic') codexRelics(body);
   else if (codexTab === 'potion') codexPotions(body);
+  else if (codexTab === 'monster') codexMonsters(body);
   else if (codexTab === 'char') codexChars(body);
   else codexWords(body);
   body.scrollTop = 0;
@@ -896,6 +908,67 @@ function codexPotions(body) {
       + (d.battleOnly ? '<span class="cx-tag who">전투 전용</span>' : '')
       + `<small>${typeof d.desc === 'function' ? d.desc(1) : d.desc}</small></div>`;
     body.appendChild(row);
+  });
+}
+
+/** 몬스터 초상은 보이는 것만 굽는다 — 한 막에 25종이라 한꺼번에 구우면 화면이 멈칫한다 */
+let monsterWatcher = null;
+function bakeWhenSeen(box, mid, shape) {
+  const draw = () => {
+    if (box.dataset.done) return;
+    box.dataset.done = '1';
+    const url = I3.monsterPortrait3D(mid, shape);
+    if (url) box.innerHTML = `<img src="${url}" alt="">`;
+  };
+  if (!('IntersectionObserver' in window)) { draw(); return; }
+  if (!monsterWatcher) {
+    monsterWatcher = new IntersectionObserver((rows, ob) => {
+      rows.forEach((r) => { if (r.isIntersecting) { r.target._draw(); ob.unobserve(r.target); } });
+    }, { root: $('#codex-body'), rootMargin: '300px 0px' });
+  }
+  box._draw = draw;
+  monsterWatcher.observe(box);
+}
+
+/** 행동 한 줄 : 의도 아이콘 + 이름 + 무슨 일이 일어나는지 */
+function monsterMoveRow(mv) {
+  const bits = [];
+  if (mv.dmg != null) {
+    const d = typeof mv.dmg === 'string' ? mv.dmg : `<b>${mv.dmg}</b>`;
+    bits.push(`${d} 피해${mv.hits > 1 ? ` ×${mv.hits}` : ''}`);
+  }
+  if (mv.blk) bits.push(`방어도 <b>${mv.blk}</b>`);
+  mv.lines.forEach((t) => bits.push(escapeHtml(t)));
+  const idle = { sleep: '잠들어 있습니다', stun: '기절해 움직이지 못합니다' }[mv.intent]
+    || '다음 행동을 준비합니다';
+  const body = bits.length ? bits.join(' · ') : `<i>${idle}</i>`;
+  return `<li><span class="mv-ic">${intentIcon(mv.intent, 15)}</span>`
+    + `<span class="mv-name">${escapeHtml(mv.name)}</span>`
+    + `<span class="mv-what">${body}${mv.grows ? ' <em>쓸수록 세집니다</em>' : ''}</span></li>`;
+}
+
+function codexMonsters(body) {
+  const ids = monsterList(codexSub);
+  body.appendChild(el('p', { class: 'cx-count', text: `${ids.length}종` }));
+  if (codexSub === 'summon') {
+    body.appendChild(el('p', { class: 'rel-foot',
+      text: '지도에서 직접 만나지 않고, 싸우는 도중에 불려 나오거나 쪼개져 나오는 것들입니다.' }));
+  }
+  ids.forEach((id) => {
+    const m = MONSTERS[id];
+    const kind = m.kind || 'normal';
+    const card = el('div', { class: `cx-mon k-${kind}` });
+    const hp = m.hp[0] === m.hp[1] ? `${m.hp[0]}` : `${m.hp[0]}~${m.hp[1]}`;
+    card.innerHTML = `
+      <div class="cx-portrait mon"></div>
+      <div class="cx-mon-info">
+        <b>${escapeHtml(m.name)}</b><span class="mon-kind k-${kind}">${MONSTER_KIND_KR[kind]}</span>
+        <em>${escapeHtml(m.en || '')}</em>
+        <p class="mon-meta">체력 <b>${hp}</b> · ${escapeHtml(whereText(id))}</p>
+        <ul class="mon-moves">${movesOf(m).map(monsterMoveRow).join('')}</ul>
+      </div>`;
+    bakeWhenSeen(card.querySelector('.cx-portrait'), id, m.shape);
+    body.appendChild(card);
   });
 }
 

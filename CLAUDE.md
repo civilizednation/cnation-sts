@@ -76,6 +76,7 @@ js/data/
   monsters.js              몬스터 57 + 조우 테이블 + 초반 약체 풀
   relics.js                유물 117 (캐릭터 전용 포함)
   potions.js / events.js / neow.js (시작 보너스)
+  monsterdex.js            몬스터 도감 자료 — 행동 설명을 실제 코드에서 뽑아낸다
   changelog.js             변경 이력 (타이틀 → Revision History)
   keywords.js              키워드 사전 (카드 상세 설명 · 용어집 · 카드 텍스트 색 입히기)
 js/engine/
@@ -124,6 +125,10 @@ python3 -m http.server 8099
   겹치면 문양을 보고 이름을 또 확인해야 해서 문양을 두는 의미가 없다.
   쓸 문양이 없으면 `js/ui/cardart.js` 에 새로 만든다 (100x100 뷰박스, `[path, 색, 불투명도?]` 의 배열)
 * 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/icons.js` 의 `POWER_GLYPH` 에 아이콘 매핑
+* 몬스터의 행동(`moves`)을 고치거나 새로 만들면 **`node tools/check-monsterdex.mjs` 를 돌릴 것**.
+  백과사전 몬스터 탭의 설명은 손으로 쓴 글이 아니라 `run` 을 가짜 전투판에 돌려 받아 적은 것이다
+  (`js/data/monsterdex.js`). 가짜 판이 모르는 `B.*` 메서드를 부르면 그 행동의 설명이 비어 버리는데,
+  이 검사가 잡아 준다. 설명을 데이터에 따로 적어 두지 말 것 — 수치를 고칠 때 반드시 둘이 갈라진다
 * Slay the Spire 는 Mega Crit 저작물 — 비영리 팬 프로젝트로만 유지, 원작 에셋 반입 금지
 * **익명 인증 백업을 다시 시도하지 말 것** (v1.3.2 에서 넣었다가 v1.3.4 에서 철회).
   익명 인증의 토큰이 계정 데이터와 같은 localStorage 에 있어, 저장소가 지워지면
