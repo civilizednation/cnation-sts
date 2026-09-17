@@ -304,16 +304,55 @@ function signInErrorText(reason) {
   }[reason] || '로그인에 실패했습니다. 게스트로도 바로 즐기실 수 있습니다.';
 }
 
+/**
+ * PIN 입력 — 네모 6칸.
+ * 칸마다 input 을 두면 지우기·붙여넣기·자동완성이 전부 깨지므로,
+ * 보이지 않는 input 하나가 입력을 받고 네모는 그려 주기만 한다.
+ */
+function pinBox() {
+  const wrap = el('div', { class: 'pinbox' });
+  const cells = el('div', { class: 'pin-cells' });
+  const boxes = [];
+  for (let i = 0; i < Account.PIN_LEN; i++) {
+    const c = el('span', { class: 'pin-cell' });
+    boxes.push(c);
+    cells.appendChild(c);
+  }
+  // type=tel 이어야 폰에서 숫자판이 확실히 뜬다 (가림은 네모 쪽에서 한다)
+  const input = el('input', { class: 'pin-real', type: 'tel', inputmode: 'numeric',
+    autocomplete: 'off', autocorrect: 'off', maxlength: String(Account.PIN_LEN),
+    'aria-label': `PIN 숫자 ${Account.PIN_LEN}자리` });
+
+  const paint = () => {
+    const n = input.value.length;
+    const on = document.activeElement === input;
+    boxes.forEach((b, i) => {
+      b.classList.toggle('on', i < n);
+      b.classList.toggle('now', on && i === Math.min(n, Account.PIN_LEN - 1));
+    });
+  };
+  input.addEventListener('input', () => {
+    input.value = input.value.replace(/\D/g, '').slice(0, Account.PIN_LEN);
+    paint();
+  });
+  input.addEventListener('focus', paint);
+  input.addEventListener('blur', paint);
+  wrap.addEventListener('click', () => { try { input.focus(); } catch (e) { /* noop */ } });
+
+  wrap.append(cells, input);
+  wrap.input = input;
+  paint();
+  return wrap;
+}
+
 /** 이메일 + PIN 입력 폼. mode 는 'in'(로그인) 또는 'up'(가입) */
 function authForm(body, mode, onDone) {
   const up = mode === 'up';
   const email = el('input', { class: 'name-input', type: 'email', inputmode: 'email',
     autocomplete: 'email', autocapitalize: 'off', spellcheck: 'false', placeholder: '이메일' });
-  const pin = el('input', { class: 'name-input pin-input', type: 'password', inputmode: 'numeric',
-    autocomplete: up ? 'new-password' : 'current-password', maxlength: String(Account.PIN_LEN),
-    pattern: '\\d*', placeholder: `PIN 숫자 ${Account.PIN_LEN}자리` });
-  // 숫자만 받는다 — 폰에서 숫자판이 뜨고 실수로 글자가 섞이지 않는다
-  pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, Account.PIN_LEN); });
+  const pinWrap = pinBox();
+  const pin = pinWrap.input;
+  const pinLabel = el('p', { class: 'pin-label', text: `PIN 숫자 ${Account.PIN_LEN}자리` });
   const err = el('div', { class: 'form-err' });
   const btn = el('button', { class: 'btn gold', text: up ? '가입하고 시작' : '로그인' });
 
@@ -333,7 +372,7 @@ function authForm(body, mode, onDone) {
     el('p', { class: 'auth-lead', text: up
       ? `이메일과 숫자 ${Account.PIN_LEN}자리만 정하면 됩니다. 비밀번호를 따로 만들지 않습니다.`
       : '가입할 때 쓴 이메일과 PIN 을 넣어 주세요.' }),
-    email, pin, btn, err,
+    email, pinLabel, pinWrap, btn, err,
   );
 
   if (up) {

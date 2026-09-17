@@ -136,6 +136,10 @@ python3 -m http.server 8099
 * 로그인은 **이메일 + 숫자 6자리 PIN**, Firebase Auth REST 만 쓴다 (v1.3.10).
   Firebase SDK 를 다시 들이지 말 것 — 팝업이 필요 없어 REST 로 충분하고,
   SDK 를 쓰면 112KB 가 늘 뿐 아니라 iOS 사파리의 팝업·ITP 문제가 되살아난다
+* 입력칸(`.name-input`, `.pin-real`)의 `font-size` 를 16px 아래로 내리지 말 것 —
+  iOS 사파리가 입력칸을 누를 때 화면을 확대해 버린다
+* PIN 네모(`pinBox()`)는 칸마다 input 을 두지 않는다. 투명한 input 하나가 입력을 받고
+  네모는 그려 주기만 한다 — 칸마다 두면 지우기·붙여넣기·자동완성이 깨진다
 * PIN 을 4자리로 줄이지 말 것. Firebase 비밀번호 최소 길이가 6자라 뒤에 뭔가
   덧붙여야 하는데, 그러면 Firebase 재설정 페이지가 정한 새 비밀번호와 어긋나
   "PIN 찾기" 가 깨진다
