@@ -802,22 +802,32 @@ button.opt-row:active { background: #2a2238; }
 }
 .card-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
 /* 백과사전 : 카드를 읽는 화면이므로 한 줄에 4장만 두고 크게 보여 준다.
-   어차피 스크롤하는 화면이라 세로를 넉넉히 써서 설명 글상자를 키웠다
-   (전투 카드 비율 74:106 대신 74:124 — 글자를 키워도 덜 잘린다). */
-.card-grid.cx-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+   어차피 스크롤하는 화면이라 세로를 넉넉히 써서 글상자를 키웠고,
+   그 덕에 글자를 키워도 설명이 잘리지 않는다 (전투 카드 비율 74:106 → 74:132).
+   안쪽 여백까지 % 로 잡은 이유 : px 로 두면 좁은 화면에서 글상자를 더 많이 먹어
+   같은 비율인데도 좁은 폰에서만 설명이 잘렸다. */
+.card-grid.cx-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+#codex-body { padding-left: 7px; padding-right: 7px; }
 .card-grid.cx-cards .card.small {
-  width: 100%; height: auto; aspect-ratio: 74 / 124;
+  width: 100%; height: auto; aspect-ratio: 74 / 132;
   /* 이름표를 끌어올리는 양 — margin 의 % 는 너비 기준이라 높이 13% 를 너비로 환산했다 */
-  --nb-lift: 21.8%;
-  --desc-fs: clamp(8.4px, 2.5vw, 11.5px);
+  --nb-lift: 23.2%;
+  /* 카드 너비의 약 13% (카드폭 = (100vw - 29px) / 4) */
+  --desc-fs: calc(3.25vw - 0.9px);
 }
-.card-grid.cx-cards .card.small .card-art { height: 30%; }
-.card-grid.cx-cards .card.small .card-name { font-size: clamp(11px, 3.15vw, 14px); letter-spacing: -.3px; }
+.card-grid.cx-cards .card.small .card-art { height: 27%; }
+.card-grid.cx-cards .card.small .card-body { padding: 4% 5% 0; }
+.card-grid.cx-cards .card.small .card-namebar { padding: 7% 3% 2.5%; }
+.card-grid.cx-cards .card.small .card-footer { padding: 0 0 2%; }
+.card-grid.cx-cards .card.small .card-name { font-size: calc(3.7vw - 1px); letter-spacing: -.3px; }
 .card-grid.cx-cards .card.small .card-desc { line-height: 1.36; }
-.card-grid.cx-cards .card.small .card-cost { width: 30px; height: 30px; }
-.card-grid.cx-cards .card.small .card-cost span { font-size: 16px; }
-.card-grid.cx-cards .card.small .card-type { font-size: 9px; }
-.card-grid.cx-cards .card.small .card-rar { width: 8.5px; height: 8.5px; }
+.card-grid.cx-cards .card.small .card-cost { width: 32px; height: 32px; }
+.card-grid.cx-cards .card.small .card-cost span { font-size: 17px; }
+.card-grid.cx-cards .card.small .card-type { font-size: calc(2.5vw - 0.6px); }
+.card-grid.cx-cards .card.small .card-rar { width: 9px; height: 9px; }
+/* 백과사전의 유물·물약 아이콘은 보는 게 목적이라 가로세로 1.5배로 키운다 */
+#codex-body .cx-row .relic-big { width: 69px; height: 69px; border-radius: 16px; }
+#codex-body .cx-row .relic-big svg { width: 39px; height: 39px; }
 .choice-row {
   width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px;
   background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px; text-align: left;

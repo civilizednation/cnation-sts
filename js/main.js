@@ -740,7 +740,7 @@ function codexRelics(body) {
   ids.forEach((id) => {
     const d = RELICS[id];
     const row = el('div', { class: 'cx-row' });
-    row.innerHTML = `<div class="relic-big">${relicHTML(d, 28)}</div>`
+    row.innerHTML = `<div class="relic-big">${relicHTML(d, 42)}</div>`
       + `<div class="cx-info"><b>${d.name}</b>`
       + `<span class="cx-tag r-${d.rarity}">${RELIC_RARITY_KR[d.rarity] || d.rarity}</span>`
       + (d.char ? `<span class="cx-tag who">${CHAR_KR[d.char] || d.char}</span>` : '')
@@ -757,7 +757,7 @@ function codexPotions(body) {
   ids.forEach((id) => {
     const d = POTIONS[id];
     const row = el('div', { class: 'cx-row' });
-    row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 28)}</div>`
+    row.innerHTML = `<div class="relic-big" style="border-color:${d.color}">${potionHTML(d, 42)}</div>`
       + `<div class="cx-info"><b>${d.name}</b>`
       + `<span class="cx-tag r-${d.rarity}">${RELIC_RARITY_KR[d.rarity] || d.rarity}</span>`
       + (d.battleOnly ? '<span class="cx-tag who">전투 전용</span>' : '')
