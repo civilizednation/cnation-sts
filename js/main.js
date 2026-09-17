@@ -172,10 +172,8 @@ function initTitle() {
     applyAccount();
     if (!$('#scr-profile').hidden) renderSyncLine();
   });
-  Account.init().then((mode) => {
-    applyAccount();
-    if (mode === 'none') askMode();
-  }).catch(() => { applyAccount(); askMode(); });
+  // 타이틀을 가로막지 않는다. 게스트/로그인은 타이틀의 계정 칩에서 고른다.
+  Account.init().then(applyAccount).catch(applyAccount);
   // 계정을 나누기 전(v1.2 이하) 저장이 있으면 게스트 이어하기로 옮겨 준다
   Legacy.adoptOldestSave(Account.GUEST_SAVE_KEY);
   BGM.play('title');
@@ -194,11 +192,13 @@ function initTitle() {
   });
   $('#btn-new').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
-    if (Account.state().mode === 'none') { askMode(() => newGame()); return; }
+    // 아직 안 골랐으면 게스트로 시작한다. 로그인은 계정 칩에서 언제든 할 수 있다.
+    if (Account.state().mode === 'none') Account.chooseGuest();
     newGame();
   });
   $('#btn-continue').addEventListener('click', () => {
     unlockAudio(); SFX.tap();
+    if (Account.state().mode === 'none') Account.chooseGuest();
     const r = loadRun();
     if (!r) { toast('저장된 게임이 없습니다.'); return; }
     G.run = r;
@@ -206,10 +206,8 @@ function initTitle() {
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
   $('#btn-codex').addEventListener('click', () => { unlockAudio(); SFX.tap(); showCodex('card', 'red'); });
-  $('#btn-profile').addEventListener('click', () => {
-    unlockAudio(); SFX.tap();
-    if (Account.state().mode === 'none') askMode(); else showAccount();
-  });
+  $('#btn-profile').addEventListener('click', () => { unlockAudio(); SFX.tap(); showAccount(); });
+  $('#login-hint').addEventListener('click', () => { unlockAudio(); SFX.tap(); showAccount(); });
   $('#btn-profile-close').addEventListener('click', () => { SFX.tap(); showScreen('scr-title'); });
   $('#btn-stats-close').addEventListener('click', () => { SFX.tap(); showAccount(); });
   const gear = $('#btn-settings-title');
@@ -251,37 +249,17 @@ function renderAccountChip() {
   chip.innerHTML = `<span class="pc-icon">${svgIcon(icon, { size: 13, color })}</span>`
     + `<span class="pc-name">${escapeHtml(label)}</span>`
     + `<span class="pc-caret">▾</span>`;
+  // 로그인하지 않았으면 칩 아래에 한 줄로 알려 준다 (모달로 가로막지 않는다)
+  const hint = $('#login-hint');
+  if (hint) {
+    hint.hidden = signed;
+    hint.textContent = '눌러서 구글로 로그인하면 전적이 남습니다';
+  }
 }
 
 function escapeHtml(t) {
   return String(t).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-/** 맨 처음 — 게스트로 놀지, 구글로 로그인할지 고른다 */
-function askMode(after) {
-  openModal((box) => {
-    const err = el('div', { class: 'form-err' });
-    const go = async (btn) => {
-      btn.disabled = true;
-      const r = await Account.signIn();
-      btn.disabled = false;
-      if (r.ok) { closeModal(); applyAccount(); await afterSignIn(); if (after) after(); return; }
-      if (r.reason === 'cancelled') return;              // 사용자가 닫았다 — 조용히
-      err.textContent = signInErrorText(r.reason);
-    };
-    box.append(
-      modalTitle('첨탑에 오르기 전에'),
-      modalText('구글로 로그인하면 전적이 남고 기기를 바꿔도 따라옵니다.\n게스트로도 바로 즐길 수 있지만 전적은 남지 않습니다.'),
-      el('div', { class: 'mode-list' },
-        el('button', { class: 'btn gold mode-btn', onclick: (e) => go(e.currentTarget),
-          html: `<b>구글로 로그인</b><small>전적 · 통계가 쌓이고 계정에 저장됩니다</small>` }),
-        el('button', { class: 'btn ghost mode-btn', onclick: () => {
-          SFX.tap(); Account.chooseGuest(); closeModal(); applyAccount(); if (after) after();
-        }, html: `<b>게스트로 시작</b><small>바로 시작 · 전적은 남지 않습니다</small>` })),
-      err,
-    );
-  });
 }
 
 function signInErrorText(reason) {
