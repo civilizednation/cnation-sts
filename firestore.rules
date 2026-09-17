@@ -1,8 +1,8 @@
 // cnation STS — Firestore 보안 규칙
 //
 // Firebase 콘솔 → Firestore Database → 규칙 에 그대로 붙여 넣고 게시한다.
-// 구글로 로그인한 사람이 자기 uid 문서 하나만 읽고 쓸 수 있다.
-// 남의 전적은 읽을 수도 쓸 수도 없다.
+// 이메일+PIN 으로 로그인한 사람이 자기 uid 문서 하나만 읽고 쓸 수 있다.
+// 로그인하지 않았거나 남의 uid 면 읽기도 쓰기도 막힌다.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
