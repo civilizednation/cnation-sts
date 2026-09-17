@@ -80,7 +80,7 @@ function write(key, val) {
 }
 
 function saveMode() {
-  write(MODE_KEY, { mode: S.mode, uid: S.uid, email: S.email, refreshToken });
+  write(MODE_KEY, { mode: S.mode, uid: S.uid, email: S.email, name: S.name, refreshToken });
 }
 
 /** 응답이 없어도 영원히 매달리지 않도록 시간 제한을 건다 */
@@ -110,11 +110,16 @@ const AUTH = (m) => `https://identitytoolkit.googleapis.com/v1/accounts:${m}?key
 const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${CFG.apiKey}`;
 
 export const PIN_LEN = 6;
+export const MAX_NAME = 12;
+/** 이름 다듬기 — 공백 정리 + 길이 제한 */
+export function cleanName(raw) {
+  return String(raw || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
+}
 export const isValidPin = (p) => new RegExp(`^\\d{${PIN_LEN}}$`).test(String(p || ''));
 export const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim());
 
-/** 이메일에서 화면에 쓸 이름을 뽑는다 (앞부분만) */
-const nameFromEmail = (e) => String(e || '').split('@')[0].slice(0, 14) || '플레이어';
+/** 이름을 안 정한 계정(1.3.11 이전 가입)은 이메일 앞부분으로 대신한다 */
+const nameFromEmail = (e) => String(e || '').split('@')[0].slice(0, MAX_NAME) || '플레이어';
 
 /**
  * 게스트로 하던 진행 중인 런을 로그인한 계정으로 옮긴다.
@@ -141,9 +146,34 @@ function applyAuth(r, email) {
   S.mode = 'user';
   S.uid = r.localId;
   S.email = email || r.email || '';
-  S.name = nameFromEmail(S.email);
+  S.name = cleanName(r.displayName) || nameFromEmail(S.email);
   saveMode();
   emit();
+}
+
+/**
+ * 게임에서 쓸 이름을 바꾼다. Firebase 쪽 displayName 에 저장하므로
+ * 다른 기기에서 로그인해도 같은 이름이 따라온다.
+ */
+export async function setDisplayName(raw) {
+  const name = cleanName(raw);
+  if (!isSignedIn()) return { ok: false, reason: 'not-signed-in' };
+  if (!name) return { ok: false, reason: 'empty-name' };
+  try {
+    const r = await req(AUTH('update'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: await token(), displayName: name, returnSecureToken: false }),
+    });
+    S.name = cleanName(r && r.displayName) || name;
+    saveMode();
+    emit();
+    markDirty();                       // 서버 문서의 이름도 맞춰 둔다
+    return { ok: true };
+  } catch (e) {
+    console.warn('이름 바꾸기 실패', e);
+    return { ok: false, reason: authReason(e.message) };
+  }
 }
 
 /** Firebase 가 주는 오류 코드를 사람이 읽을 말로 */
@@ -176,12 +206,17 @@ async function authCall(method, body, email) {
   }
 }
 
-/** 새 계정 만들기 */
-export function signUp(email, pin) {
+/** 새 계정 만들기. name 을 비워 두면 이메일 앞부분을 쓴다 */
+export async function signUp(email, pin, name) {
   const e = String(email || '').trim();
-  if (!isValidEmail(e)) return Promise.resolve({ ok: false, reason: 'bad-email' });
-  if (!isValidPin(pin)) return Promise.resolve({ ok: false, reason: 'weak-pin' });
-  return authCall('signUp', { email: e, password: String(pin) }, e);
+  if (!isValidEmail(e)) return { ok: false, reason: 'bad-email' };
+  if (!isValidPin(pin)) return { ok: false, reason: 'weak-pin' };
+  const r = await authCall('signUp', { email: e, password: String(pin) }, e);
+  if (!r.ok) return r;
+  // 이름은 계정이 생긴 뒤에야 붙일 수 있다. 실패해도 가입 자체는 성립한다.
+  const want = cleanName(name);
+  if (want) await setDisplayName(want).catch(() => {});
+  return r;
 }
 
 /** 기존 계정으로 들어가기 */
@@ -267,6 +302,7 @@ async function push(uid, rows) {
       fields: {
         runs: { stringValue: JSON.stringify(rows) },
         email: { stringValue: S.email || '' },
+        name: { stringValue: S.name || '' },
         at: { integerValue: String(Date.now()) },
         ver: { stringValue: VERSION },
       },
@@ -430,7 +466,7 @@ export async function init() {
   // 지난번에 로그인해 두었다 — 화면은 먼저 그 이름으로 그려 두고,
   // 토큰 갱신은 뒤따라온다. 실패해도 게임 시작을 막지 않는다.
   S.mode = 'user'; S.uid = saved.uid; S.email = saved.email;
-  S.name = nameFromEmail(saved.email);
+  S.name = cleanName(saved.name) || nameFromEmail(saved.email);
   refreshToken = saved.refreshToken || null;
   emit();
 
@@ -455,7 +491,7 @@ export async function init() {
 document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) flush(); });
 
 export const Account = {
-  init, state, signUp, signIn, sendPinReset, signOut: signOutNow, chooseGuest,
+  init, state, signUp, signIn, sendPinReset, setDisplayName, signOut: signOutNow, chooseGuest,
   isGuest, isSignedIn, onAccountChange, Records, saveKeyOf, GUEST_SAVE_KEY,
-  PIN_LEN, isValidPin, isValidEmail,
+  PIN_LEN, MAX_NAME, isValidPin, isValidEmail, cleanName,
 };

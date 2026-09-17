@@ -350,6 +350,10 @@ function authForm(body, mode, onDone) {
   const up = mode === 'up';
   const email = el('input', { class: 'name-input', type: 'email', inputmode: 'email',
     autocomplete: 'email', autocapitalize: 'off', spellcheck: 'false', placeholder: '이메일' });
+  // 가입할 때만 — 게임 안에서 쓸 이름. 비워 두면 이메일 앞부분을 쓴다
+  const nick = up ? el('input', { class: 'name-input', type: 'text',
+    autocomplete: 'nickname', autocapitalize: 'off', spellcheck: 'false',
+    maxlength: String(Account.MAX_NAME), placeholder: '게임에서 쓸 이름 (선택)' }) : null;
   const pinWrap = pinBox();
   const pin = pinWrap.input;
   const pinLabel = el('p', { class: 'pin-label', text: `PIN 숫자 ${Account.PIN_LEN}자리` });
@@ -359,7 +363,7 @@ function authForm(body, mode, onDone) {
   const go = async () => {
     err.textContent = '';
     btn.disabled = true;
-    const r = up ? await Account.signUp(email.value, pin.value)
+    const r = up ? await Account.signUp(email.value, pin.value, nick ? nick.value : '')
                  : await Account.signIn(email.value, pin.value);
     btn.disabled = false;
     if (r.ok) { SFX.relic(); applyAccount(); await afterSignIn(); onDone(); return; }
@@ -372,8 +376,10 @@ function authForm(body, mode, onDone) {
     el('p', { class: 'auth-lead', text: up
       ? `이메일과 숫자 ${Account.PIN_LEN}자리만 정하면 됩니다. 비밀번호를 따로 만들지 않습니다.`
       : '가입할 때 쓴 이메일과 PIN 을 넣어 주세요.' }),
-    email, pinLabel, pinWrap, btn, err,
+    email,
   );
+  if (nick) body.append(nick);
+  body.append(pinLabel, pinWrap, btn, err);
 
   if (up) {
     body.append(el('button', { class: 'btn ghost', text: '이미 계정이 있어요',
@@ -385,10 +391,11 @@ function authForm(body, mode, onDone) {
       el('button', { class: 'link-btn', text: 'PIN 을 잊었어요',
         onclick: async (e) => {
           SFX.tap();
+          const self = e.currentTarget;               // await 뒤에는 currentTarget 이 null 이다
           if (!Account.isValidEmail(email.value)) { err.textContent = '먼저 이메일을 넣어 주세요.'; return; }
-          e.currentTarget.disabled = true;
+          self.disabled = true;
           const r = await Account.sendPinReset(email.value);
-          e.currentTarget.disabled = false;
+          self.disabled = false;
           err.textContent = r.ok ? '' : signInErrorText(r.reason);
           if (r.ok) toast('재설정 메일을 보냈습니다. 메일에서 새 PIN 을 정해 주세요.');
         } }),
@@ -413,6 +420,8 @@ function showAccount(form) {
     body.append(card);
     body.append(el('button', { class: 'btn', text: '전적 보기',
       onclick: () => { SFX.tap(); showStats(); } }));
+    body.append(el('button', { class: 'btn ghost', text: '이름 바꾸기',
+      onclick: () => { SFX.tap(); promptRename(); } }));
     body.append(el('button', { class: 'btn ghost', text: '로그아웃',
       onclick: () => { SFX.tap(); confirmSignOut(); } }));
     body.append(el('p', { class: 'cloud-line', id: 'cloud-line' }));
@@ -428,6 +437,37 @@ function showAccount(form) {
   }
   body.scrollTop = 0;
   showScreen('scr-profile');
+}
+
+/** 게임에서 쓸 이름 바꾸기 — 계정(Firebase displayName)에 저장돼 기기를 바꿔도 따라온다 */
+function promptRename() {
+  const a = Account.state();
+  openModal((box) => {
+    const input = el('input', { class: 'name-input', type: 'text',
+      autocomplete: 'nickname', autocapitalize: 'off', spellcheck: 'false',
+      maxlength: String(Account.MAX_NAME), placeholder: '게임에서 쓸 이름',
+      value: a.name || '' });
+    const err = el('div', { class: 'form-err' });
+    // e.currentTarget 은 await 뒤에 null 이 되므로 버튼을 먼저 붙잡아 둔다
+    const save = async (btn) => {
+      const want = Account.cleanName(input.value);
+      if (!want) { err.textContent = '이름을 넣어 주세요.'; return; }
+      btn.disabled = true;
+      const r = await Account.setDisplayName(want);
+      btn.disabled = false;
+      if (!r.ok) { err.textContent = '이름을 바꾸지 못했습니다. 잠시 뒤에 다시 해 주세요.'; return; }
+      closeModal(); applyAccount(); showAccount(); toast('이름을 바꿨습니다.');
+    };
+    box.append(
+      modalTitle('이름 바꾸기'),
+      modalText(`전적 화면과 타이틀에 보일 이름입니다. ${Account.MAX_NAME}자까지.`),
+      input, err,
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn gold', text: '저장', onclick: (e) => { SFX.tap(); save(e.currentTarget); } }),
+        el('button', { class: 'btn ghost', text: '취소', onclick: () => { SFX.tap(); closeModal(); } })),
+    );
+    setTimeout(() => { try { input.focus(); } catch (e) { /* noop */ } }, 60);
+  }, { stack: true });
 }
 
 function confirmSignOut() {
