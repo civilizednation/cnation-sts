@@ -715,12 +715,8 @@ function showNeow() {
       row.addEventListener('click', () => take(o));
       box.appendChild(row);
     });
-    // 네 번째 아래 — 아무 표시 없는 다섯 번째 자리
-    const secret = el('button', { class: 'choice-secret' });
-    secret.setAttribute('aria-hidden', 'true');
-    secret.tabIndex = -1;
-    secret.addEventListener('click', () => take(NEOW_SECRET));
-    box.appendChild(secret);
+    // 여기 있던 '아무 표시 없는 다섯 번째 자리' 는 v1.3.17 에서 걷어냈다.
+    // 같은 일을 관리자 모드의 "자원 2배로 시작" 이 대신한다 (NEOW_SECRET 는 그대로 쓴다).
   });
 }
 
