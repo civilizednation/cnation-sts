@@ -59,6 +59,10 @@ export class Run {
     this.eliteQueue = [];
     this.unknownChance = { monster: 10, shop: 3, treasure: 2 };
     this.startedAt = Date.now();   // 통계용 : 이 런을 시작한 시각
+    // 오른 길 : 층마다 한 줄씩 쌓인다. 엔딩 화면이 1층부터 50층까지 되짚어 준다.
+    // stats 는 합계만 세고 map 은 지금 막의 것만 남아서(막마다 새로 만든다)
+    // 지나온 길을 알려면 따로 적어 두는 수밖에 없다.
+    this.journal = [];
     // 시작 보너스 화면의 숨겨진 선택지 — 최대 체력·공격·방어·물약 효과가 2배
     this.cheat = false;
     this.usedEvents = [];
@@ -262,7 +266,11 @@ export class Run {
     this.stats.floorsClimbed++;
     this.relicHook('onClimb', this);
     if (!pos.boss) this.map[pos.row][pos.col].visited = true;
-    return pos.boss ? { type: ROOM.BOSS } : this.map[pos.row][pos.col];
+    const node = pos.boss ? { type: ROOM.BOSS } : this.map[pos.row][pos.col];
+    const row = { f: this.floor, a: this.act, t: node.type };
+    if (node.type === ROOM.BOSS) row.b = this.bossEncounter.slice();   // 어느 보스였는지
+    this.journal.push(row);
+    return node;
   }
 
   // ---------------- 조우 생성 ----------------
@@ -405,7 +413,7 @@ export class Run {
       monsterCount: this.monsterCount, cardRarityBonus: this.cardRarityBonus,
       potionChance: this.potionChance, bossEncounter: this.bossEncounter,
       usedEvents: this.usedEvents, unknownChance: this.unknownChance, cheat: this.cheat,
-      startedAt: this.startedAt,
+      startedAt: this.startedAt, journal: this.journal,
     };
   }
 
@@ -428,6 +436,7 @@ export class Run {
     r.unknownChance = o.unknownChance || { monster: 10, shop: 3, treasure: 2 };
     r.cheat = !!o.cheat;
     r.startedAt = o.startedAt || Date.now();
+    r.journal = Array.isArray(o.journal) ? o.journal : [];   // 1.3.14 이전 저장에는 없다
     r.monsterQueue = r.rng.shuffle(ENCOUNTERS[r.act].weak.slice());
     r.strongQueue = r.rng.shuffle(ENCOUNTERS[r.act].strong.slice());
     r.eliteQueue = r.rng.shuffle(ENCOUNTERS[r.act].elite.slice());

@@ -77,6 +77,7 @@ js/data/
   relics.js                유물 117 (캐릭터 전용 포함)
   potions.js / events.js / neow.js (시작 보너스)
   monsterdex.js            몬스터 도감 자료 — 행동 설명을 실제 코드에서 뽑아낸다
+  ending.js                캐릭터별 엔딩 문구 (원작 텍스트 아님 — 직접 쓴 것)
   changelog.js             변경 이력 (타이틀 → Revision History)
   keywords.js              키워드 사전 (카드 상세 설명 · 용어집 · 카드 텍스트 색 입히기)
 js/engine/
@@ -90,6 +91,7 @@ js/ui/
 js/three/
   scene3d.js               전투 씬 (캐릭터/몬스터/연출)
   title3d.js               타이틀 화면 3D 무대 (캐릭터 4종 + 보스 그림자)
+  ending3d.js              엔딩 무대 (빛기둥 아래 캐릭터 하나)
   items3d.js               유물·물약·골드·체력 3D 아이콘 굽기 (PNG 데이터 URL 캐시)
   map3d.js                 3D 지도 (노드 아이콘/경로/레이캐스트)
 ```

@@ -721,6 +721,96 @@ html, body {
   display: inline-block; min-width: 56px; color: var(--gold); font-weight: 700; font-size: 10.5px;
 }
 
+/* ---------- 엔딩 화면 ---------- */
+/* .screen 이 이미 position:absolute; inset:0 이다. 여기서 relative 로 덮으면
+   inset 이 풀려 높이가 0 이 되고, 안의 절대 배치 요소가 통째로 사라진다. */
+#scr-ending { overflow: hidden; background: #0d0916; }
+#ending-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* 3D 무대 위에 글을 얹으므로 아래쪽을 어둡게 덮어 글씨가 묻히지 않게 한다 */
+.ed-veil {
+  position: absolute; inset: 0; pointer-events: none;
+  /* 인물이 있는 위쪽은 거의 건드리지 않고, 글이 앉는 아래쪽만 덮는다 */
+  background: linear-gradient(180deg, rgba(13,9,22,0) 0%, rgba(13,9,22,.06) 32%,
+    rgba(13,9,22,.5) 50%, rgba(13,9,22,.94) 63%, #0d0916 72%);
+}
+/* 2장부터는 3D 무대를 뒤로 물린다. 무대 위에 글이 겹치기 시작하기 때문이다
+   (이 장막은 화면에 고정이고 글은 스크롤되므로, 안 물리면 글이 인물 위에 얹힌다) */
+.ed-veil::after {
+  content: ''; position: absolute; inset: 0; background: #0d0916;
+  opacity: 0; transition: opacity 1.1s ease;
+}
+#scr-ending.dim .ed-veil::after { opacity: .88; }
+
+.ed-skip {
+  position: absolute; top: calc(10px + var(--safe-t)); right: 12px; z-index: 5;
+  opacity: .75;
+}
+.ed-stage {
+  position: absolute; inset: 0; z-index: 4; overflow-y: auto;
+  padding: 0 14px calc(22px + var(--safe-b));
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  scroll-behavior: smooth;
+}
+/* 각 장은 자리를 미리 차지하지 않는다 — 켜질 때 나타난다 */
+.ed-ch {
+  width: 100%; max-width: 460px; display: none;
+  animation: ed-in .8s ease both;
+}
+.ed-ch.on { display: block; }
+@keyframes ed-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* 1장 — 3D 인물 아래에 앉도록 위를 비워 둔다 */
+#ed-ch1 { text-align: center; padding-top: 58vh; }
+.ed-kicker { margin: 0; font-size: 11px; letter-spacing: 3px; color: var(--gold-dim); }
+.ed-title {
+  font-family: 'Kirang Haerang', var(--font); margin: 4px 0 14px;
+  font-size: clamp(30px, 9.5vw, 42px); font-weight: 400; color: #ffd884; line-height: 1.1;
+  text-shadow: 0 0 30px rgba(255,150,60,.5), 0 3px 0 #2a1508;
+}
+.ed-lines p {
+  margin: 0 0 7px; font-size: 13.5px; line-height: 1.8; color: #cfc8d8;
+  opacity: 0; transform: translateY(8px); transition: opacity .9s ease, transform .9s ease;
+}
+.ed-lines p.on { opacity: 1; transform: none; }
+.ed-who { margin: 14px 0 0; font-size: 11.5px; color: #7a7288; letter-spacing: 1px; }
+
+.ed-h {
+  margin: 0 0 8px; text-align: center; font-family: var(--font);
+  font-size: 13px; letter-spacing: 2px; color: var(--gold);
+}
+/* 2장 — 오른 길 */
+.ed-now {
+  margin: 0 0 10px; text-align: center; font-family: var(--font);
+  font-size: 17px; color: #ece4ff; min-height: 24px;
+}
+.ed-road { display: flex; flex-direction: column; gap: 9px; }
+.ed-act {
+  background: rgba(22,18,30,.72); border: 1px solid var(--panel-edge);
+  border-radius: 11px; padding: 8px 9px;
+}
+.ed-act-n { display: block; font-size: 10px; color: #7a7288; letter-spacing: 1px; margin-bottom: 5px; }
+.ed-cells { display: flex; flex-wrap: wrap; gap: 5px; }
+.ed-cell {
+  width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
+  background: #16121e; border: 1px solid #2c2440;
+  opacity: .28; filter: grayscale(1); transition: opacity .3s, filter .3s, box-shadow .3s, transform .3s;
+}
+.ed-cell img { width: 20px; height: 20px; object-fit: contain; }
+.ed-cell.on { opacity: 1; filter: none; }
+.ed-cell.t-elite { width: 30px; height: 30px; }
+.ed-cell.t-elite img { width: 24px; height: 24px; }
+.ed-cell.t-boss { width: 36px; height: 36px; border-color: #c04a5a; }
+.ed-cell.t-boss img { width: 30px; height: 30px; }
+.ed-cell.t-boss.on { box-shadow: 0 0 0 2px rgba(255,90,74,.35), 0 0 18px rgba(255,90,74,.4); transform: scale(1.06); }
+
+/* 3장 — 기록 */
+#ed-record .stat-cards { margin-bottom: 4px; grid-template-columns: repeat(3, 1fr); }
+#ed-record .stat-card b { font-size: 17px; }
+.ed-relics { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.ed-relics .relic-big { width: 44px; height: 44px; border-radius: 11px; }
+#ed-record .card-grid { justify-content: center; }
+.ed-actions { margin-top: 16px; }
+
 /* ---------- 백과사전 : 몬스터 ---------- */
 .cx-mon {
   display: flex; align-items: stretch; gap: 10px; padding: 10px; border-radius: 12px;

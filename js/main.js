@@ -15,6 +15,7 @@ import { RELICS, RARITY_KR as RELIC_RARITY_KR } from './data/relics.js';
 import { POTIONS } from './data/potions.js';
 import { EVENTS, pickEvent } from './data/events.js';
 import { CHARACTERS, CHAR_LIST, charOf } from './data/characters.js';
+import { endingOf } from './data/ending.js';
 import { rollNeowOptions, NEOW_SECRET } from './data/neow.js';
 import { BGM } from './bgm.js';
 import { STANCE_KR } from './engine/battle.js';
@@ -24,6 +25,7 @@ import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
 import * as I3 from './three/items3d.js';
 import * as T3 from './three/title3d.js';
+import * as E3 from './three/ending3d.js';
 import { SFX, unlockAudio, setSfxEnabled, isSfxEnabled, setSfxVolume, getSfxVolume,
   setBgmEnabled, isBgmEnabled, setBgmVolume, getBgmVolume } from './audio.js';
 import * as S3 from './three/scene3d.js';
@@ -48,7 +50,8 @@ window.__fight = (ids) => startBattle({ monsters: ids, kind: 'boss' });     // �
 window.__rewards = (rw, done) => showRewards(rw, done || (() => goMap()));  // 자동 테스트용
 window.__afterBoss = () => afterBoss();                                     // 자동 테스트용
 
-const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex', 'scr-profile', 'scr-stats', 'scr-modal'];
+const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex',
+  'scr-profile', 'scr-stats', 'scr-ending', 'scr-modal'];
 function showScreen(id) {
   if (id !== 'scr-modal') clearModal();
   if (id === 'scr-title') { BGM.play('title'); applyAccount(); }
@@ -2880,6 +2883,21 @@ function gameOver() {
   });
 }
 
+// ============================================================
+//  엔딩 — 첨탑을 정복했을 때. 모달이 아니라 화면 하나를 쓴다.
+//  모달은 "닫아야 할 것" 으로 읽혀서 오래 볼 마음이 들지 않는다.
+//
+//  1장 정복의 순간 → 2장 오른 길(1~50층) → 3장 기록.
+//  건너뛰기는 언제나 있고(두 번째 클리어부터는 지루하면 안 된다),
+//  화면을 탭하면 지금 장을 끝내고 다음으로 넘어간다.
+// ============================================================
+const edTimers = [];
+let edChapter = 0;                       // 0 아직 시작 전 · 1~3 진행 중 · 4 끝
+let edSkipTo = null;                     // 지금 장을 즉시 끝내는 함수
+
+function edClear() { edTimers.forEach(clearTimeout); edTimers.length = 0; }
+function edWait(ms, fn) { edTimers.push(setTimeout(fn, ms)); }
+
 function victory() {
   const run = G.run;
   recordRun(run, 'victory');
@@ -2887,16 +2905,217 @@ function victory() {
   SFX.victory();
   clearSave();
   stopOverlayLoop();
-  openModal((box) => {
-    box.append(
-      modalTitle('첨탑 정복!'),
-      el('div', { class: 'relic-big', style: { width: '78px', height: '78px', borderColor: '#e8c34a' }, html: svgIcon('crown', { size: 44, color: '#ffd884' }) }),
-      modalText(`50층의 최종 보스를 쓰러뜨렸습니다!\n\n남은 체력 : ${run.player.hp}/${run.player.maxHp}\n처치한 적 : ${run.stats.kills}\n덱 : ${run.deck.length}장 · 유물 : ${run.relics.length}개`),
-      el('div', { class: 'modal-actions' },
-        el('button', { class: 'btn gold', text: '새 게임', onclick: () => { closeModal(); newGame(); } }),
-        el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); applyAccount(); } })),
-    );
+  showEnding(run);
+}
+
+function showEnding(run) {
+  edClear();
+  edChapter = 0;
+  const stage = $('#ending-stage');
+  const ed = endingOf(run.charId);
+  const ch = CHARACTERS[run.charId];
+
+  stage.innerHTML = `
+    <section class="ed-ch" id="ed-ch1">
+      <p class="ed-kicker">50층 · 첨탑 정복</p>
+      <h2 class="ed-title">${escapeHtml(ed.title)}</h2>
+      <div class="ed-lines">${ed.lines.map((t) => `<p>${escapeHtml(t)}</p>`).join('')}</div>
+      <p class="ed-who">${escapeHtml(run.charName)}</p>
+    </section>
+    <section class="ed-ch" id="ed-ch2">
+      <h3 class="ed-h">오른 길</h3>
+      <p class="ed-now" id="ed-now">1층</p>
+      <div class="ed-road" id="ed-road"></div>
+    </section>
+    <section class="ed-ch" id="ed-ch3"><div id="ed-record"></div></section>`;
+
+  $('#scr-ending').classList.remove('dim');
+  showScreen('scr-ending');
+  try { E3.initEnding($('#ending-canvas'), ch && ch.model); } catch (e) { console.warn('엔딩 무대 실패', e); }
+  requestAnimationFrame(() => { try { E3.resizeEnding(); } catch (e) { /* noop */ } });
+
+  const skip = $('#btn-ending-skip');
+  skip.hidden = false;
+  skip.onclick = (e) => { e.stopPropagation(); SFX.tap(); edFinishAll(run); };
+  $('#scr-ending').onclick = () => { edNext(run); };
+
+  edChapter1(run);
+}
+
+/** 지금 장을 즉시 끝내고 다음 장으로 */
+function edNext(run) {
+  if (edChapter >= 3 || !edSkipTo) return;
+  edClear();
+  const go = edSkipTo;
+  edSkipTo = null;
+  go();
+}
+
+/** 끝까지 건너뛴다 */
+function edFinishAll(run) {
+  edClear();
+  edSkipTo = null;
+  $('#scr-ending').classList.add('dim');
+  edReveal('#ed-ch1');
+  $$('#ed-ch1 .ed-lines p').forEach((p) => p.classList.add('on'));
+  edBuildRoad(run, true);
+  edChapter3(run);
+}
+
+const edReveal = (sel) => { const e = $(sel); if (e) e.classList.add('on'); };
+
+// ---------- 1장 : 정복의 순간 ----------
+function edChapter1(run) {
+  edChapter = 1;
+  const lines = $$('#ed-ch1 .ed-lines p');
+  const done = () => { edChapter2(run); };
+  edSkipTo = () => { lines.forEach((p) => p.classList.add('on')); done(); };
+
+  edWait(250, () => edReveal('#ed-ch1'));
+  lines.forEach((p, i) => edWait(1500 + i * 1100, () => { p.classList.add('on'); SFX.tap(); }));
+  edWait(1500 + lines.length * 1100 + 1300, () => { edSkipTo = null; done(); });
+}
+
+// ---------- 2장 : 오른 길 ----------
+/** 층 띠를 만든다. lit 이면 처음부터 전부 켜 둔다 */
+function edBuildRoad(run, lit) {
+  const road = $('#ed-road');
+  if (!road || road.dataset.built) { if (lit) $$('#ed-road .ed-cell').forEach((c) => c.classList.add('on')); return; }
+  road.dataset.built = '1';
+  const rows = Array.isArray(run.journal) ? run.journal : [];
+  if (!rows.length) return;
+  const thumbs = (() => { try { return M3.iconThumbs(LEGEND.map(([t]) => t), 96) || {}; } catch (e) { return {}; } })();
+
+  let act = 0;
+  let cells = null;
+  rows.forEach((r) => {
+    if (r.a !== act) {
+      act = r.a;
+      const blk = el('div', { class: 'ed-act' });
+      blk.appendChild(el('span', { class: 'ed-act-n', text: `${act}막` }));
+      cells = el('div', { class: 'ed-cells' });
+      blk.appendChild(cells);
+      road.appendChild(blk);
+    }
+    const c = el('span', { class: `ed-cell t-${r.t}${lit ? ' on' : ''}` });
+    c.dataset.f = r.f;
+    if (r.b) c.dataset.boss = r.b.map((id) => (MONSTERS[id] ? MONSTERS[id].name : id)).join(' · ');
+    c.innerHTML = thumbs[r.t] ? `<img src="${thumbs[r.t]}" alt="">` : svgIcon('star', { size: 13, color: '#8b83a0' });
+    cells.appendChild(c);
   });
+}
+
+/**
+ * 지금 켜진 칸이 보이도록 엔딩 무대만 굴린다.
+ * scrollIntoView 는 바깥쪽 스크롤 상자까지 전부 굴려서 화면이 통째로 밀린다
+ * (건너뛰기 버튼이 화면 밖으로 나가 버렸다).
+ */
+function edScrollTo(cell) {
+  const stage = $('#ending-stage');
+  if (!stage) return;
+  const r = cell.getBoundingClientRect();
+  const s = stage.getBoundingClientRect();
+  if (r.top >= s.top + 40 && r.bottom <= s.bottom - 40) return;
+  stage.scrollTop += (r.top - s.top) - stage.clientHeight * 0.5;
+}
+
+function edChapter2(run) {
+  edChapter = 2;
+  edBuildRoad(run, false);
+  const cells = $$('#ed-road .ed-cell');
+  const now = $('#ed-now');
+  const done = () => { edChapter3(run); };
+  // 오른 길 기록이 없는 예전 저장 — 2장은 건너뛴다
+  if (!cells.length) { done(); return; }
+
+  edSkipTo = () => { cells.forEach((c) => c.classList.add('on')); if (now) now.textContent = '50층 · 도착'; done(); };
+  $('#scr-ending').classList.add('dim');
+  edReveal('#ed-ch2');
+
+  let at = 0;
+  const step = () => {
+    if (at >= cells.length) { edSkipTo = null; edWait(900, done); return; }
+    const c = cells[at++];
+    c.classList.add('on');
+    if (now) now.textContent = c.dataset.boss ? `${c.dataset.f}층 · ${c.dataset.boss}` : `${c.dataset.f}층`;
+    edScrollTo(c);
+    if (c.dataset.boss) { SFX.boss(); edWait(1000, step); return; }
+    if (at % 3 === 0) SFX.tap();
+    edWait(105, step);
+  };
+  edWait(500, step);
+}
+
+// ---------- 3장 : 기록 ----------
+function edStatTile(label, value) {
+  return `<div class="stat-card"><b>${value}</b><small>${label}</small></div>`;
+}
+
+function edChapter3(run) {
+  edChapter = 3;
+  edSkipTo = null;
+  const skip = $('#btn-ending-skip');
+  if (skip) skip.hidden = true;            // 마지막 장에서는 건너뛸 것이 없다
+  edReveal('#ed-ch2');
+  const box = $('#ed-record');
+  if (!box || box.dataset.built) { edReveal('#ed-ch3'); return; }
+  box.dataset.built = '1';
+
+  const mins = Math.max(1, Math.round((Date.now() - (run.startedAt || Date.now())) / 60000));
+  box.innerHTML = `<h3 class="ed-h">기록</h3>
+    <div class="stat-cards">
+      ${edStatTile('걸린 시간', `${mins}분`)}
+      ${edStatTile('남은 체력', `${run.player.hp}/${run.player.maxHp}`)}
+      ${edStatTile('처치한 적', run.stats.kills)}
+      ${edStatTile('엘리트', run.stats.elites)}
+      ${edStatTile('보스', run.stats.bosses)}
+      ${edStatTile('남은 골드', run.gold)}
+    </div>`;
+
+  // 모은 유물
+  if (run.relics.length) {
+    const h = el('h4', { class: 'stat-h', text: `모은 유물 ${run.relics.length}개` });
+    const row = el('div', { class: 'ed-relics' });
+    run.relics.forEach((r) => {
+      const d = RELICS[r.id];
+      if (!d) return;
+      const cell = el('div', { class: 'relic-big', title: d.name });
+      cell.innerHTML = relicHTML(d, 34);
+      row.appendChild(cell);
+    });
+    box.append(h, row);
+  }
+
+  // 최종 덱
+  const order = { attack: 0, skill: 1, power: 2, status: 3, curse: 4 };
+  const deck = [...run.deck].sort((a, b) => (order[a.type] - order[b.type])
+    || a.baseCost - b.baseCost || a.name.localeCompare(b.name));
+  box.append(el('h4', { class: 'stat-h', text: `최종 덱 ${deck.length}장` }));
+  const grid = el('div', { class: 'card-grid' });
+  deck.forEach((c) => {
+    const ce = renderCard(c, { small: true });
+    ce.addEventListener('click', (e) => { e.stopPropagation(); SFX.cardPick(); showCardDetail(c); });
+    grid.appendChild(ce);
+  });
+  box.appendChild(grid);
+
+  const acts = el('div', { class: 'modal-actions ed-actions' },
+    el('button', { class: 'btn gold', text: '새 게임',
+      onclick: (e) => { e.stopPropagation(); SFX.tap(); edLeave(); newGame(); } }),
+    el('button', { class: 'btn ghost', text: '타이틀',
+      onclick: (e) => { e.stopPropagation(); SFX.tap(); edLeave(); G.run = null; showScreen('scr-title'); } }));
+  box.appendChild(acts);
+
+  edReveal('#ed-ch3');
+  edWait(60, () => { const s = $('#ending-stage'); if (s) s.scrollTop = s.scrollHeight; });
+  edChapter = 4;
+}
+
+function edLeave() {
+  edClear();
+  edSkipTo = null;
+  $('#scr-ending').onclick = null;
+  try { E3.disposeEnding(); } catch (e) { /* noop */ }
 }
 
 // ============================================================
