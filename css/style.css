@@ -754,13 +754,13 @@ html, body {
   background: linear-gradient(180deg, rgba(13,9,22,0) 0%, rgba(13,9,22,.06) 32%,
     rgba(13,9,22,.5) 50%, rgba(13,9,22,.94) 63%, #0d0916 72%);
 }
-/* 2장부터는 3D 무대를 뒤로 물린다. 무대 위에 글이 겹치기 시작하기 때문이다
-   (이 장막은 화면에 고정이고 글은 스크롤되므로, 안 물리면 글이 인물 위에 얹힌다) */
+/* 아래로 내려갈수록 3D 무대를 뒤로 물린다. 장막은 화면에 고정이고 글은
+   스크롤되므로, 안 물리면 글이 인물 위에 그대로 얹힌다.
+   --dim 은 스크롤 위치에 따라 js 가 채운다 (edPaint) */
 .ed-veil::after {
   content: ''; position: absolute; inset: 0; background: #0d0916;
-  opacity: 0; transition: opacity 1.1s ease;
+  opacity: var(--dim, 0);
 }
-#scr-ending.dim .ed-veil::after { opacity: .88; }
 
 .ed-skip {
   position: absolute; top: calc(10px + var(--safe-t)); right: 12px; z-index: 5;
@@ -770,18 +770,16 @@ html, body {
   position: absolute; inset: 0; z-index: 4; overflow-y: auto;
   padding: 0 14px calc(22px + var(--safe-b));
   display: flex; flex-direction: column; align-items: center; gap: 18px;
-  scroll-behavior: smooth;
 }
-/* 각 장은 자리를 미리 차지하지 않는다 — 켜질 때 나타난다 */
-.ed-ch {
-  width: 100%; max-width: 460px; display: none;
-  animation: ed-in .8s ease both;
-}
-.ed-ch.on { display: block; }
-@keyframes ed-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+/* 세 장이 한 두루마리로 이어져 있다. 화면이 그 위를 천천히 내려간다 */
+.ed-ch { width: 100%; max-width: 460px; }
+.ed-ch[hidden] { display: none; }
 
 /* 1장 — 3D 인물 아래에 앉도록 위를 비워 둔다 */
-#ed-ch1 { text-align: center; padding-top: 58vh; }
+/* 장마다 한 화면쯤 숨 쉴 자리를 준다. 붙여 두면 천천히 내려가도
+   1장을 읽는 동안 2장이 이미 화면에 들어와 있어 장면이 겹쳐 보인다 */
+#ed-ch1 { text-align: center; padding-top: 58vh; padding-bottom: 18vh; }
+#ed-ch2 { padding-bottom: 12vh; }
 .ed-kicker { margin: 0; font-size: 11px; letter-spacing: 3px; color: var(--gold-dim); }
 .ed-title {
   font-family: 'Kirang Haerang', var(--font); margin: 4px 0 14px;
@@ -800,9 +798,12 @@ html, body {
   font-size: 13px; letter-spacing: 2px; color: var(--gold);
 }
 /* 2장 — 오른 길 */
+/* 오른 길을 지나는 동안 "지금 몇 층" 이 위에 붙어 따라다닌다 */
 .ed-now {
-  margin: 0 0 10px; text-align: center; font-family: var(--font);
+  position: sticky; top: 0; z-index: 2;
+  margin: 0 0 10px; padding: 5px 0 7px; text-align: center; font-family: var(--font);
   font-size: 17px; color: #ece4ff; min-height: 24px;
+  background: linear-gradient(180deg, #0d0916 60%, rgba(13,9,22,0));
 }
 .ed-road { display: flex; flex-direction: column; gap: 9px; }
 .ed-act {
@@ -830,7 +831,7 @@ html, body {
 .ed-relics { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .ed-relics .relic-big { width: 44px; height: 44px; border-radius: 11px; }
 #ed-record .card-grid { justify-content: center; }
-.ed-actions { margin-top: 16px; }
+.ed-actions { margin-top: 16px; padding-bottom: 8px; }
 
 /* ---------- 백과사전 : 몬스터 ---------- */
 .cx-mon {

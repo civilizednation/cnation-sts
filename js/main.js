@@ -3097,16 +3097,25 @@ function adminInfo() {
 //  엔딩 — 첨탑을 정복했을 때. 모달이 아니라 화면 하나를 쓴다.
 //  모달은 "닫아야 할 것" 으로 읽혀서 오래 볼 마음이 들지 않는다.
 //
-//  1장 정복의 순간 → 2장 오른 길(1~50층) → 3장 기록.
-//  건너뛰기는 언제나 있고(두 번째 클리어부터는 지루하면 안 된다),
-//  화면을 탭하면 지금 장을 끝내고 다음으로 넘어간다.
+//  1장 정복의 순간 · 2장 오른 길(1~50층) · 3장 기록이 한 두루마리에
+//  이어져 있고, 화면이 그 위를 아주 천천히 내려간다 (v1.3.18).
+//  장을 툭툭 갈아 끼우면 읽을 새가 없어 눈이 따라가지 못했다.
+//
+//  · 처음 3초는 멈춰 서서 1장의 문구가 한 줄씩 떠오르는 것을 보여 준다
+//  · 그 뒤 맨 아래까지 정해진 시간(약 14초)에 걸쳐 내려간다
+//  · 오른 길의 칸은 화면이 지나갈 때 켜지고, 보스 칸에서는 잠깐 멈춘다
+//  · 사용자가 손을 대면 자동 스크롤을 놓아 준다 — 위로 올려 다시 봐도 된다
 // ============================================================
 const edTimers = [];
-let edChapter = 0;                       // 0 아직 시작 전 · 1~3 진행 중 · 4 끝
-let edSkipTo = null;                     // 지금 장을 즉시 끝내는 함수
+const edAuto = { raf: 0, on: false, pauseUntil: 0, speed: 160, done: false };
 
 function edClear() { edTimers.forEach(clearTimeout); edTimers.length = 0; }
 function edWait(ms, fn) { edTimers.push(setTimeout(fn, ms)); }
+
+/** 두루마리 전체를 내려가는 데 쓸 시간(초). 덱이 길든 짧든 비슷하게 걸리도록 */
+const ED_SCROLL_SEC = 14;
+const ED_HOLD_MS = 3000;          // 1장에 머무는 시간
+const ED_BOSS_PAUSE_MS = 900;     // 보스 칸에서 숨 고르는 시간
 
 function victory() {
   const run = G.run;
@@ -3120,7 +3129,8 @@ function victory() {
 
 function showEnding(run) {
   edClear();
-  edChapter = 0;
+  edStopAuto();
+  edAuto.done = false;
   const stage = $('#ending-stage');
   const ed = endingOf(run.charId);
   const ch = CHARACTERS[run.charId];
@@ -3139,59 +3149,135 @@ function showEnding(run) {
     </section>
     <section class="ed-ch" id="ed-ch3"><div id="ed-record"></div></section>`;
 
-  $('#scr-ending').classList.remove('dim');
+  const veil = $('#scr-ending .ed-veil');
+  if (veil) veil.style.setProperty('--dim', '0');
   showScreen('scr-ending');
   try { E3.initEnding($('#ending-canvas'), ch && ch.model); } catch (e) { console.warn('엔딩 무대 실패', e); }
   requestAnimationFrame(() => { try { E3.resizeEnding(); } catch (e) { /* noop */ } });
 
+  // 두루마리를 통째로 미리 깔아 둔다 — 그래야 한 번에 굴릴 수 있다
+  edBuildRoad(run);
+  edBuildRecord(run);
+  const road = Array.isArray(run.journal) && run.journal.length;
+  $('#ed-ch2').hidden = !road;                 // 오른 길 기록이 없는 예전 저장
+  stage.scrollTop = 0;
+
   const skip = $('#btn-ending-skip');
   skip.hidden = false;
-  skip.onclick = (e) => { e.stopPropagation(); SFX.tap(); edFinishAll(run); };
-  $('#scr-ending').onclick = () => { edNext(run); };
+  skip.onclick = (e) => { e.stopPropagation(); SFX.tap(); edJumpToEnd(); };
 
-  edChapter1(run);
-}
+  // 손을 대면 자동 스크롤을 놓아 준다 (칸 켜기와 장막은 계속 따라간다)
+  ['wheel', 'touchstart', 'pointerdown', 'keydown'].forEach((ev) => {
+    stage.addEventListener(ev, edRelease, { passive: true });
+  });
 
-/** 지금 장을 즉시 끝내고 다음 장으로 */
-function edNext(run) {
-  if (edChapter >= 3 || !edSkipTo) return;
-  edClear();
-  const go = edSkipTo;
-  edSkipTo = null;
-  go();
-}
-
-/** 끝까지 건너뛴다 */
-function edFinishAll(run) {
-  edClear();
-  edSkipTo = null;
-  $('#scr-ending').classList.add('dim');
-  edReveal('#ed-ch1');
-  $$('#ed-ch1 .ed-lines p').forEach((p) => p.classList.add('on'));
-  edBuildRoad(run, true);
-  edChapter3(run);
-}
-
-const edReveal = (sel) => { const e = $(sel); if (e) e.classList.add('on'); };
-
-// ---------- 1장 : 정복의 순간 ----------
-function edChapter1(run) {
-  edChapter = 1;
+  // 1장 문구가 한 줄씩 떠오른다
   const lines = $$('#ed-ch1 .ed-lines p');
-  const done = () => { edChapter2(run); };
-  edSkipTo = () => { lines.forEach((p) => p.classList.add('on')); done(); };
+  lines.forEach((p, i) => edWait(600 + i * 850, () => { p.classList.add('on'); SFX.tap(); }));
 
-  edWait(250, () => edReveal('#ed-ch1'));
-  lines.forEach((p, i) => edWait(1500 + i * 1100, () => { p.classList.add('on'); SFX.tap(); }));
-  edWait(1500 + lines.length * 1100 + 1300, () => { edSkipTo = null; done(); });
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    lines.forEach((p) => p.classList.add('on'));
+    edPaint(stage);                            // 스스로 굴리지 않고 손에 맡긴다
+    return;
+  }
+  edWait(ED_HOLD_MS, () => edStartAuto());
+}
+
+/** 사용자가 손을 댔다 — 자동 스크롤만 멈추고 나머지는 계속 따라간다 */
+function edRelease() { edAuto.on = false; }
+
+function edStopAuto() {
+  edAuto.on = false;
+  if (edAuto.raf) cancelAnimationFrame(edAuto.raf);
+  edAuto.raf = 0;
+}
+
+function edStartAuto() {
+  const stage = $('#ending-stage');
+  if (!stage) return;
+  const max = Math.max(0, stage.scrollHeight - stage.clientHeight);
+  // 두루마리가 길든 짧든 비슷한 시간이 걸리게 속도를 정한다 (너무 느리거나 빠르지 않게)
+  edAuto.speed = clamp(max / ED_SCROLL_SEC, 80, 300);
+  edAuto.on = true;
+  edAuto.pauseUntil = 0;
+  // 프레임마다 조금씩 더하는 방식은 느린 기기에서 그만큼 느려진다.
+  // 시작 시각을 기준으로 "지금 어디쯤이어야 하는지" 를 계산해 프레임 수와 무관하게 만든다.
+  const t0 = performance.now();
+  let paused = 0;                       // 보스 칸에서 쉰 시간의 합
+  let last = t0;
+  const step = (now) => {
+    const st = $('#ending-stage');
+    if (!st || $('#scr-ending').hidden) { edStopAuto(); return; }
+    const top = Math.max(0, st.scrollHeight - st.clientHeight);
+    if (edAuto.on) {
+      if (now < edAuto.pauseUntil) paused += now - last;
+      else st.scrollTop = Math.min(top, ((now - t0 - paused) / 1000) * edAuto.speed);
+    }
+    last = now;
+    edPaint(st, now);
+    if (edAuto.on && st.scrollTop >= top - 1) { edAuto.on = false; edReachedEnd(); }
+    edAuto.raf = requestAnimationFrame(step);
+  };
+  edAuto.raf = requestAnimationFrame(step);
+}
+
+/** 화면이 지나간 만큼 칸을 켜고, 3D 무대를 뒤로 물린다 */
+function edPaint(stage, now = performance.now()) {
+  // 무대 위로 글이 올라오기 시작하면 무대를 어둡게 — 안 그러면 글이 인물에 묻힌다
+  const veil = $('#scr-ending .ed-veil');
+  if (veil) {
+    // 1장이 화면을 빠져나가는 동안에 걸쳐 서서히 — 너무 빨리 덮으면
+    // 인물이 채 보이기도 전에 사라진다
+    const k = Math.min(1, stage.scrollTop / Math.max(1, stage.clientHeight));
+    veil.style.setProperty('--dim', (k * 0.88).toFixed(3));
+  }
+
+  const line = stage.scrollTop + stage.clientHeight * 0.72;   // 이 선을 넘으면 켠다
+  const now$ = $('#ed-now');
+  const cells = $$('#ed-road .ed-cell');
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i];
+    if (c.classList.contains('on')) continue;
+    if (c.offsetParent === null) continue;
+    if (edCellTop(c, stage) > line) break;                    // 위에서부터 차례로 켜진다
+    c.classList.add('on');
+    if (now$) now$.textContent = c.dataset.boss ? `${c.dataset.f}층 · ${c.dataset.boss}` : `${c.dataset.f}층`;
+    if (c.dataset.boss) { SFX.boss(); edAuto.pauseUntil = now + ED_BOSS_PAUSE_MS; }
+    else if (i % 3 === 0) SFX.tap();
+  }
+}
+
+/** 칸이 두루마리 안에서 몇 px 지점에 있는지 */
+function edCellTop(cell, stage) {
+  return cell.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop;
+}
+
+/** 맨 아래에 닿았다 */
+function edReachedEnd() {
+  edAuto.done = true;
+  const skip = $('#btn-ending-skip');
+  if (skip) skip.hidden = true;                // 더 내려갈 곳이 없다
+}
+
+/** 건너뛰기 — 한 번에 맨 아래로 */
+function edJumpToEnd() {
+  edClear();
+  edAuto.on = false;
+  const stage = $('#ending-stage');
+  if (!stage) return;
+  $$('#ed-ch1 .ed-lines p').forEach((p) => p.classList.add('on'));
+  $$('#ed-road .ed-cell').forEach((c) => c.classList.add('on'));
+  const now$ = $('#ed-now');
+  if (now$ && $$('#ed-road .ed-cell').length) now$.textContent = '50층 · 도착';
+  stage.scrollTop = stage.scrollHeight;
+  edPaint(stage);
+  edReachedEnd();
 }
 
 // ---------- 2장 : 오른 길 ----------
-/** 층 띠를 만든다. lit 이면 처음부터 전부 켜 둔다 */
-function edBuildRoad(run, lit) {
+function edBuildRoad(run) {
   const road = $('#ed-road');
-  if (!road || road.dataset.built) { if (lit) $$('#ed-road .ed-cell').forEach((c) => c.classList.add('on')); return; }
-  road.dataset.built = '1';
+  if (!road) return;
   const rows = Array.isArray(run.journal) ? run.journal : [];
   if (!rows.length) return;
   const thumbs = (() => { try { return M3.iconThumbs(LEGEND.map(([t]) => t), 96) || {}; } catch (e) { return {}; } })();
@@ -3207,7 +3293,7 @@ function edBuildRoad(run, lit) {
       blk.appendChild(cells);
       road.appendChild(blk);
     }
-    const c = el('span', { class: `ed-cell t-${r.t}${lit ? ' on' : ''}` });
+    const c = el('span', { class: `ed-cell t-${r.t}` });
     c.dataset.f = r.f;
     if (r.b) c.dataset.boss = r.b.map((id) => (MONSTERS[id] ? MONSTERS[id].name : id)).join(' · ');
     c.innerHTML = thumbs[r.t] ? `<img src="${thumbs[r.t]}" alt="">` : svgIcon('star', { size: 13, color: '#8b83a0' });
@@ -3215,61 +3301,14 @@ function edBuildRoad(run, lit) {
   });
 }
 
-/**
- * 지금 켜진 칸이 보이도록 엔딩 무대만 굴린다.
- * scrollIntoView 는 바깥쪽 스크롤 상자까지 전부 굴려서 화면이 통째로 밀린다
- * (건너뛰기 버튼이 화면 밖으로 나가 버렸다).
- */
-function edScrollTo(cell) {
-  const stage = $('#ending-stage');
-  if (!stage) return;
-  const r = cell.getBoundingClientRect();
-  const s = stage.getBoundingClientRect();
-  if (r.top >= s.top + 40 && r.bottom <= s.bottom - 40) return;
-  stage.scrollTop += (r.top - s.top) - stage.clientHeight * 0.5;
-}
-
-function edChapter2(run) {
-  edChapter = 2;
-  edBuildRoad(run, false);
-  const cells = $$('#ed-road .ed-cell');
-  const now = $('#ed-now');
-  const done = () => { edChapter3(run); };
-  // 오른 길 기록이 없는 예전 저장 — 2장은 건너뛴다
-  if (!cells.length) { done(); return; }
-
-  edSkipTo = () => { cells.forEach((c) => c.classList.add('on')); if (now) now.textContent = '50층 · 도착'; done(); };
-  $('#scr-ending').classList.add('dim');
-  edReveal('#ed-ch2');
-
-  let at = 0;
-  const step = () => {
-    if (at >= cells.length) { edSkipTo = null; edWait(900, done); return; }
-    const c = cells[at++];
-    c.classList.add('on');
-    if (now) now.textContent = c.dataset.boss ? `${c.dataset.f}층 · ${c.dataset.boss}` : `${c.dataset.f}층`;
-    edScrollTo(c);
-    if (c.dataset.boss) { SFX.boss(); edWait(1000, step); return; }
-    if (at % 3 === 0) SFX.tap();
-    edWait(105, step);
-  };
-  edWait(500, step);
-}
-
 // ---------- 3장 : 기록 ----------
 function edStatTile(label, value) {
   return `<div class="stat-card"><b>${value}</b><small>${label}</small></div>`;
 }
 
-function edChapter3(run) {
-  edChapter = 3;
-  edSkipTo = null;
-  const skip = $('#btn-ending-skip');
-  if (skip) skip.hidden = true;            // 마지막 장에서는 건너뛸 것이 없다
-  edReveal('#ed-ch2');
+function edBuildRecord(run) {
   const box = $('#ed-record');
-  if (!box || box.dataset.built) { edReveal('#ed-ch3'); return; }
-  box.dataset.built = '1';
+  if (!box) return;
 
   const mins = Math.max(1, Math.round((Date.now() - (run.startedAt || Date.now())) / 60000));
   box.innerHTML = `<h3 class="ed-h">기록</h3>
@@ -3282,7 +3321,6 @@ function edChapter3(run) {
       ${edStatTile('남은 골드', run.gold)}
     </div>`;
 
-  // 모은 유물
   if (run.relics.length) {
     const h = el('h4', { class: 'stat-h', text: `모은 유물 ${run.relics.length}개` });
     const row = el('div', { class: 'ed-relics' });
@@ -3296,7 +3334,6 @@ function edChapter3(run) {
     box.append(h, row);
   }
 
-  // 최종 덱
   const order = { attack: 0, skill: 1, power: 2, status: 3, curse: 4 };
   const deck = [...run.deck].sort((a, b) => (order[a.type] - order[b.type])
     || a.baseCost - b.baseCost || a.name.localeCompare(b.name));
@@ -3309,22 +3346,20 @@ function edChapter3(run) {
   });
   box.appendChild(grid);
 
-  const acts = el('div', { class: 'modal-actions ed-actions' },
+  box.appendChild(el('div', { class: 'modal-actions ed-actions' },
     el('button', { class: 'btn gold', text: '새 게임',
       onclick: (e) => { e.stopPropagation(); SFX.tap(); edLeave(); newGame(); } }),
     el('button', { class: 'btn ghost', text: '타이틀',
-      onclick: (e) => { e.stopPropagation(); SFX.tap(); edLeave(); G.run = null; showScreen('scr-title'); } }));
-  box.appendChild(acts);
-
-  edReveal('#ed-ch3');
-  edWait(60, () => { const s = $('#ending-stage'); if (s) s.scrollTop = s.scrollHeight; });
-  edChapter = 4;
+      onclick: (e) => { e.stopPropagation(); SFX.tap(); edLeave(); G.run = null; showScreen('scr-title'); } })));
 }
 
 function edLeave() {
   edClear();
-  edSkipTo = null;
-  $('#scr-ending').onclick = null;
+  edStopAuto();
+  const stage = $('#ending-stage');
+  if (stage) {
+    ['wheel', 'touchstart', 'pointerdown', 'keydown'].forEach((ev) => stage.removeEventListener(ev, edRelease));
+  }
   try { E3.disposeEnding(); } catch (e) { /* noop */ }
 }
 
