@@ -19,7 +19,7 @@ import { endingOf } from './data/ending.js';
 import { rollNeowOptions, NEOW_SECRET } from './data/neow.js';
 import { BGM } from './bgm.js';
 import { STANCE_KR } from './engine/battle.js';
-import { MONSTERS } from './data/monsters.js';
+import { MONSTERS, ENCOUNTERS } from './data/monsters.js';
 import { movesOf, whereText, monsterList, MONSTER_KIND_KR } from './data/monsterdex.js';
 import { renderCard, renderCardBig } from './ui/cardview.js';
 import { svgIcon, powerIcon, intentIcon, INTENT_COLOR, relicIcon, hashColor } from './ui/icons.js';
@@ -313,30 +313,30 @@ function signInErrorText(reason) {
  * 칸마다 input 을 두면 지우기·붙여넣기·자동완성이 전부 깨지므로,
  * 보이지 않는 input 하나가 입력을 받고 네모는 그려 주기만 한다.
  */
-function pinBox() {
+function pinBox(len = Account.PIN_LEN) {
   const wrap = el('div', { class: 'pinbox' });
-  const cells = el('div', { class: 'pin-cells' });
+  const cells = el('div', { class: 'pin-cells', style: { '--pin-n': String(len) } });
   const boxes = [];
-  for (let i = 0; i < Account.PIN_LEN; i++) {
+  for (let i = 0; i < len; i++) {
     const c = el('span', { class: 'pin-cell' });
     boxes.push(c);
     cells.appendChild(c);
   }
   // type=tel 이어야 폰에서 숫자판이 확실히 뜬다 (가림은 네모 쪽에서 한다)
   const input = el('input', { class: 'pin-real', type: 'tel', inputmode: 'numeric',
-    autocomplete: 'off', autocorrect: 'off', maxlength: String(Account.PIN_LEN),
-    'aria-label': `PIN 숫자 ${Account.PIN_LEN}자리` });
+    autocomplete: 'off', autocorrect: 'off', maxlength: String(len),
+    'aria-label': `PIN 숫자 ${len}자리` });
 
   const paint = () => {
     const n = input.value.length;
     const on = document.activeElement === input;
     boxes.forEach((b, i) => {
       b.classList.toggle('on', i < n);
-      b.classList.toggle('now', on && i === Math.min(n, Account.PIN_LEN - 1));
+      b.classList.toggle('now', on && i === Math.min(n, len - 1));
     });
   };
   input.addEventListener('input', () => {
-    input.value = input.value.replace(/\D/g, '').slice(0, Account.PIN_LEN);
+    input.value = input.value.replace(/\D/g, '').slice(0, len);
     paint();
   });
   input.addEventListener('focus', paint);
@@ -2845,6 +2845,8 @@ function showSettings() {
     }
     box.append(el('div', { class: 'modal-actions' },
       el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
+    box.append(el('button', { class: 'link-btn admin-link', text: '관리자 모드',
+      onclick: () => { SFX.tap(); closeModal(); adminEnter(); } }));
   });
 }
 
@@ -2881,6 +2883,218 @@ function gameOver() {
         el('button', { class: 'btn ghost', text: '타이틀', onclick: () => { closeModal(); G.run = null; showScreen('scr-title'); applyAccount(); } })),
     );
   });
+}
+
+// ============================================================
+//  관리자 모드 — 설정 맨 아래 작은 링크로 들어간다.
+//
+//  여기 숫자는 자물쇠가 아니라 문고리다. 브라우저에서 돌아가는 코드라
+//  소스를 열면 그대로 보인다. 남이 봐서 곤란한 것(다른 사람의 전적 따위)은
+//  절대 여기에 두지 말 것 — 그건 Firestore 규칙으로 막아야 한다.
+//
+//  여기서 시작한 판은 전부 run.cheat 를 켠다. 테스트로 만든 판이 전적에
+//  섞이면 통계가 망가진다 (v1.3.1 에서 정한 규칙).
+// ============================================================
+const ADMIN_PIN = '1257';
+let adminUnlocked = false;      // 한 번 풀면 이 실행 동안 유지
+let adminDouble = true;         // 관리자 모드로 시작하는 판에 "자원 2배" 를 얹을지
+
+function adminEnter() {
+  if (adminUnlocked) { showAdmin(); return; }
+  openModal((box) => {
+    const wrap = pinBox(ADMIN_PIN.length);
+    const err = el('div', { class: 'form-err' });
+    const go = () => {
+      if (wrap.input.value === ADMIN_PIN) { adminUnlocked = true; SFX.relic(); closeModal(); showAdmin(); return; }
+      err.textContent = '숫자가 맞지 않습니다.';
+      wrap.input.value = ''; wrap.input.dispatchEvent(new Event('input'));
+    };
+    wrap.input.addEventListener('input', () => { if (wrap.input.value.length === ADMIN_PIN.length) go(); });
+    wrap.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    box.append(
+      modalTitle('관리자 모드'),
+      modalText(`숫자 ${ADMIN_PIN.length}자리를 넣어 주세요.`),
+      wrap, err,
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn ghost', text: '취소', onclick: () => { SFX.tap(); closeModal(); } })),
+    );
+    setTimeout(() => { try { wrap.input.focus(); } catch (e) { /* noop */ } }, 60);
+  });
+}
+
+function adminSection(title) { return el('h4', { class: 'adm-h', text: title }); }
+
+function showAdmin() {
+  openModal((box) => {
+    box.append(
+      modalTitle('관리자 모드'),
+      el('p', { class: 'adm-warn',
+        text: '여기서 시작한 판은 전적에 남지 않습니다. 테스트용입니다.' }),
+
+      adminSection('새 판 시작'),
+      toggleRow('자원 2배로 시작', () => adminDouble, (v) => { adminDouble = v; }),
+      el('button', { class: 'btn', text: '1층부터 시작',
+        onclick: () => { SFX.tap(); adminPickChar('판 시작', (id) => adminStartRun(id, 1)); } }),
+      el('button', { class: 'btn', text: '층을 골라 시작',
+        onclick: () => { SFX.tap(); adminPickFloor(); } }),
+
+      adminSection('바로 보기'),
+      el('button', { class: 'btn', text: '엔딩 화면 보기',
+        onclick: () => { SFX.tap(); adminPickChar('엔딩을 볼 캐릭터', (id) => adminShowEnding(id)); } }),
+      el('button', { class: 'btn ghost', text: '이 기기 정보',
+        onclick: () => { SFX.tap(); adminInfo(); } }),
+
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })),
+    );
+  });
+}
+
+/** 캐릭터 하나 고르기 (관리자용 간단 목록) */
+function adminPickChar(title, done) {
+  openModal((box) => {
+    box.append(modalTitle(title));
+    CHAR_LIST.forEach((id) => {
+      const ch = CHARACTERS[id];
+      const row = el('button', { class: 'char-row' });
+      row.style.setProperty('--acc', ch.accent);
+      row.innerHTML = `<div class="char-portrait">${svgIcon('crown', { size: 26, color: ch.accent })}</div>`
+        + `<div class="char-info"><b>${ch.name}</b><span class="char-tag">${ch.tagline}</span></div>`;
+      row.addEventListener('click', () => { SFX.tap(); closeModal(); done(id); });
+      box.appendChild(row);
+    });
+    box.append(el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn ghost', text: '뒤로', onclick: () => { SFX.tap(); closeModal(); showAdmin(); } })));
+  }, { stack: true });
+}
+
+/** 층 고르기 → 캐릭터 고르기 → 시작 */
+function adminPickFloor() {
+  openModal((box) => {
+    const input = el('input', { class: 'name-input', type: 'tel', inputmode: 'numeric',
+      maxlength: '2', placeholder: '1 ~ 50', value: '35' });
+    const err = el('div', { class: 'form-err' });
+    const quick = el('div', { class: 'adm-quick' });
+    [[1, '1층'], [17, '1막 보스'], [18, '2막'], [34, '2막 보스'], [35, '3막'], [50, '최종 보스']]
+      .forEach(([f, label]) => quick.appendChild(el('button', { class: 'btn sm ghost', text: label,
+        onclick: () => { SFX.tap(); input.value = String(f); } })));
+    const go = () => {
+      const f = parseInt(input.value, 10);
+      if (!(f >= 1 && f <= 50)) { err.textContent = '1에서 50 사이의 층을 넣어 주세요.'; return; }
+      closeModal();
+      adminPickChar(`${f}층부터 시작`, (id) => adminStartRun(id, f));
+    };
+    box.append(
+      modalTitle('층을 골라 시작'),
+      modalText('고른 층이 있는 막의 지도를 새로 만들고 그 막의 처음에 놓습니다.\n덱과 유물은 시작 상태 그대로입니다.'),
+      quick, input, err,
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn gold', text: '시작', onclick: () => { SFX.tap(); go(); } }),
+        el('button', { class: 'btn ghost', text: '뒤로', onclick: () => { SFX.tap(); closeModal(); showAdmin(); } })),
+    );
+  }, { stack: true });
+}
+
+const adminActOf = (floor) => (floor <= 17 ? 1 : floor <= 34 ? 2 : 3);
+
+async function adminStartRun(charId, floor) {
+  const run = new Run(undefined, charId);
+  run.cheat = true;                       // 전적에 남기지 않는다
+  G.run = run;
+  G.battle = null;
+  const act = adminActOf(floor);
+  if (act > 1) { run.buildAct(act); run.floor = ACT_RANGES[act - 1].start; }
+  if (adminDouble) {
+    const ctx = { gainRelic: async (id) => gainRelic(id), relicName: (id) => (RELICS[id] ? RELICS[id].name : '유물') };
+    try { await NEOW_SECRET.apply(run, ctx); } catch (e) { console.warn('자원 2배 적용 실패', e); }
+  }
+  saveRun(run);
+  closeModal();
+  toast(`${run.charName} · ${run.floor}층부터 (전적에 남지 않습니다)`);
+  goMap();
+}
+
+/**
+ * 엔딩 화면만 보기. 실제로 오른 판이 아니라 오른 길이 없으므로
+ * 그럴듯한 여정을 만들어 채운다 (엔딩 2장이 비어 보이지 않게).
+ */
+function adminShowEnding(charId) {
+  const run = new Run(undefined, charId);
+  run.cheat = true;
+  run.act = 3; run.floor = 50;
+  run.startedAt = Date.now() - (38 + Math.floor(Math.random() * 25)) * 60000;
+  run.gold = 180 + Math.floor(Math.random() * 400);
+  run.player.hp = Math.max(8, Math.round(run.player.maxHp * (0.3 + Math.random() * 0.5)));
+
+  // 그럴듯한 오른 길 : 막마다 전투가 많고 모닥불·상점·보물이 섞이며 끝은 보스
+  const pool = ['monster', 'monster', 'monster', 'event', 'rest', 'monster', 'elite', 'shop', 'monster', 'treasure'];
+  const bossOf = { 1: ENCOUNTERS[1].boss, 2: ENCOUNTERS[2].boss, 3: ENCOUNTERS[3].boss };
+  run.journal = [];
+  let elites = 0; let kills = 0;
+  for (let f = 1; f <= 50; f++) {
+    const a = adminActOf(f);
+    let t = pool[(f * 7) % pool.length];
+    if (f === 17 || f === 34 || f === 50) t = 'boss';
+    const row = { f, a, t };
+    if (t === 'boss') { row.b = bossOf[a][Math.floor(Math.random() * bossOf[a].length)].slice(); }
+    if (t === 'elite') elites++;
+    if (t === 'monster' || t === 'elite' || t === 'boss') kills += 1 + Math.floor(Math.random() * 2);
+    run.journal.push(row);
+  }
+  run.stats = { kills, elites, bosses: 3, damageTaken: 300 + Math.floor(Math.random() * 300), floorsClimbed: 50 };
+
+  // 덱과 유물도 조금 불려 둔다 — 시작 덱만 있으면 기록 장이 허전하다
+  const extra = Object.keys(CARD_DEFS).filter((id) => {
+    const d = CARD_DEFS[id];
+    return d.color === CHARACTERS[charId].color && d.type !== 'status' && d.type !== 'curse';
+  });
+  for (let i = 0; i < 12 && extra.length; i++) {
+    const c = mk(extra[Math.floor(Math.random() * extra.length)]);
+    if (i % 4 === 0) c.upgrade();
+    run.deck.push(c);
+  }
+  ['common', 'common', 'uncommon', 'rare', 'boss'].forEach((rar) => {
+    const id = run.pickRelic(rar);
+    if (id && !run.hasRelic(id)) run.relics.push({ id, counter: 0 });
+  });
+
+  closeModal();
+  BGM.play('victory', 'victory');
+  SFX.victory();
+  showEnding(run);
+}
+
+function adminInfo() {
+  const a = Account.state();
+  let bytes = 0; let keys = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      bytes += (k.length + (localStorage.getItem(k) || '').length) * 2;
+      keys++;
+    }
+  } catch (e) { /* noop */ }
+  const rows = [
+    ['버전', VERSION],
+    ['계정', a.mode === 'user' ? `${a.name} (${a.email})` : '게스트'],
+    ['uid', a.uid || '-'],
+    ['서버와 맞춤', a.mode === 'user' ? (a.sync || '-') : '해당 없음'],
+    ['남은 전적', `${Account.Records.list().length}판`],
+    ['이어하기 저장', (() => { try { return localStorage.getItem(getSaveKey()) ? '있음' : '없음'; } catch (e) { return '?'; } })()],
+    ['저장소', `${keys}개 항목 · 약 ${(bytes / 1024).toFixed(0)}KB`],
+    ['자료', `카드 ${Object.keys(CARD_DEFS).length} · 몬스터 ${Object.keys(MONSTERS).length}`
+      + ` · 유물 ${Object.keys(RELICS).length} · 물약 ${Object.keys(POTIONS).length}`],
+    ['화면', `${innerWidth}×${innerHeight} · dpr ${devicePixelRatio}`],
+  ];
+  openModal((box) => {
+    box.append(modalTitle('이 기기 정보'));
+    const ul = el('ul', { class: 'adm-info' });
+    rows.forEach(([k, v]) => {
+      ul.appendChild(el('li', {}, el('span', { text: k }), el('b', { text: String(v) })));
+    });
+    box.append(ul, el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn ghost', text: '뒤로', onclick: () => { SFX.tap(); closeModal(); showAdmin(); } })));
+  }, { stack: true });
 }
 
 // ============================================================

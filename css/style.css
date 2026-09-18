@@ -224,7 +224,7 @@ html, body {
    (칸마다 input 을 두면 지우기·붙여넣기가 깨진다) */
 .pin-label { margin: 2px 0 -2px; font-size: 11.5px; color: #9a92a8; text-align: center; }
 .pinbox { position: relative; width: 100%; }
-.pin-cells { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; }
+.pin-cells { display: grid; grid-template-columns: repeat(var(--pin-n, 6), 1fr); gap: 7px; }
 .pin-cell {
   aspect-ratio: 1; border-radius: 11px; display: grid; place-items: center;
   background: #16121e; border: 1.5px solid var(--panel-edge);
@@ -720,6 +720,27 @@ html, body {
 .cx-char-info li span {
   display: inline-block; min-width: 56px; color: var(--gold); font-weight: 700; font-size: 10.5px;
 }
+
+/* ---------- 관리자 모드 ---------- */
+.admin-link { margin-top: 2px; font-size: 10.5px; color: #4e4760; letter-spacing: .5px; }
+.admin-link:active { color: #8b83a0; }
+.adm-warn {
+  margin: 0; width: 100%; padding: 7px 10px; border-radius: 9px;
+  background: rgba(140,60,40,.22); border: 1px solid #7a4030;
+  font-size: 11px; line-height: 1.6; color: #ffb89a; text-align: center;
+}
+.adm-h {
+  width: 100%; margin: 8px 0 -2px; font-size: 11px; font-weight: 700;
+  color: var(--gold); letter-spacing: 1.5px; font-family: var(--font);
+}
+.adm-quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; width: 100%; }
+.adm-info { width: 100%; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.adm-info li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  padding: 6px 9px; border-radius: 8px; background: rgba(30,24,42,.7);
+}
+.adm-info span { font-size: 11px; color: #8b83a0; flex: 0 0 auto; }
+.adm-info b { font-size: 11.5px; color: #cfc8d8; text-align: right; word-break: break-all; }
 
 /* ---------- 엔딩 화면 ---------- */
 /* .screen 이 이미 position:absolute; inset:0 이다. 여기서 relative 로 덮으면
