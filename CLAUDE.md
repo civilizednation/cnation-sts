@@ -57,6 +57,7 @@ css/fonts.css              동봉 웹폰트 @font-face (tools/fetch-fonts.py 가
 fonts/                     웹폰트 woff2 조각 189개 (1.5MB) + OFL.txt
 tools/fetch-fonts.py       폰트 꾸러미 생성기 (폰트를 새로 올릴 때만 실행)
 js/version.js              ★ 버전 (수정 요청 시 여기부터 올린다)
+js/viewport.js             화면 틀 자 (크기 계산은 CSS 가 한다 — 창 좌표가 필요한 곳만 여기)
 js/main.js                 컨트롤러 : 화면 전환, 전투 UI, 보상/상점/이벤트/모닥불
 js/account.js              계정 : 게스트 / 이메일+6자리 PIN 로그인, uid 기준 Firestore 전적 (전부 REST)
 js/legacy.js               v1.3.x 로컬 5계정 잔재를 첫 로그인 때 한 번 들여오기
@@ -122,6 +123,12 @@ python3 -m http.server 8099
 
 ## 주의사항
 
+* **화면 안에서 `vw`/`vh` 를 쓰지 말 것** (v1.4.1). 태블릿·컴퓨터에서는 `#app` 이 창보다 작은
+  상자라서 `vw` 가 상자를 따라 줄지 않는다 (데스크톱에서 `3.25vw` = 62px → 카드가 터진다).
+  대신 `--vw` / `--vh` 를 쓴다 — 상자 너비·높이의 1% 다 (`calc(var(--vw) * 3.25)`).
+  상자 크기는 `css/style.css` 의 `--app-w` / `--app-h` 가 `min()` 으로 정한다.
+  **js 로 재서 심지 말 것** — 첫 프레임에 전체 너비로 한 번 깜빡인다.
+  창 좌표가 필요하면 `js/viewport.js` 의 `appRect()` 로 상자 안에 가둔다
 * `jsdelivr` 등 외부 CDN 은 이 환경에서 차단됨 → three.js 는 `vendor/` 로컬 파일 사용 유지
 * 웹폰트도 같은 이유로 `fonts/` 에 동봉한다 (v1.3.3). 구글 폰트를 다시 `<link>` 로 부르지 말 것 —
   차단형 `<link>` 는 스크립트 실행까지 붙잡아 게임 시작을 늦춘다

@@ -2,6 +2,7 @@
 //  cnation STS — 메인 컨트롤러
 // ============================================================
 import { $, $$, el, sleep, clamp } from './util.js';
+import { appRect, boxInfo } from './viewport.js';
 import { VERSION } from './version.js';
 import { CHANGELOG } from './data/changelog.js';
 import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, setSaveKey, getSaveKey, ACT_RANGES } from './engine/run.js';
@@ -1249,12 +1250,15 @@ function showTooltip(ev, title, text, rows = 0) {
   tip.innerHTML = `<b>${title}</b>${text.replace(/\n/g, '<br>')}`;
   tip.hidden = false;
   const r = tip.getBoundingClientRect();
-  const cx = ev ? ev.clientX : innerWidth / 2;
-  const cy = ev ? ev.clientY : innerHeight / 2;
-  const x = clamp(cx - r.width / 2, 8, innerWidth - r.width - 8);
-  // 아래로 열면 화면 밖으로 나가는 경우 위쪽에 띄운다
+  // 태블릿·컴퓨터에서는 화면 틀이 창보다 작다. 툴팁을 창이 아니라 틀 안에 가둔다.
+  const box = appRect();
+  const cx = ev ? ev.clientX : box.left + box.width / 2;
+  const cy = ev ? ev.clientY : box.top + box.height / 2;
+  const x = clamp(cx - r.width / 2, box.left + 8, box.right - r.width - 8);
+  // 아래로 열면 틀 밖으로 나가는 경우 위쪽에 띄운다
   const below = cy + 16;
-  const y = below + r.height > innerHeight - 8 ? clamp(cy - 16 - r.height, 8, innerHeight - r.height - 8) : below;
+  const y = below + r.height > box.bottom - 8
+    ? clamp(cy - 16 - r.height, box.top + 8, box.bottom - r.height - 8) : below;
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
   clearTimeout(tipTimer);
@@ -1852,7 +1856,7 @@ function renderHand() {
 
   handEl.innerHTML = '';
   const n = B.hand.length;
-  const w = handEl.clientWidth || innerWidth - 100;
+  const w = handEl.clientWidth || appRect().width - 100;
   const rootCS = getComputedStyle(document.documentElement);
   const cwBase = parseFloat(rootCS.getPropertyValue('--card-w')) || 88;
   const chBase = parseFloat(rootCS.getPropertyValue('--card-h')) || 126;
@@ -3080,7 +3084,8 @@ function adminInfo() {
     ['저장소', `${keys}개 항목 · 약 ${(bytes / 1024).toFixed(0)}KB`],
     ['자료', `카드 ${Object.keys(CARD_DEFS).length} · 몬스터 ${Object.keys(MONSTERS).length}`
       + ` · 유물 ${Object.keys(RELICS).length} · 물약 ${Object.keys(POTIONS).length}`],
-    ['화면', `${innerWidth}×${innerHeight} · dpr ${devicePixelRatio}`],
+    ['창', `${innerWidth}×${innerHeight} · dpr ${devicePixelRatio}`],
+    ['화면 틀', boxInfo()],
   ];
   openModal((box) => {
     box.append(modalTitle('이 기기 정보'));
@@ -3390,12 +3395,16 @@ function bind() {
     if (e.target.closest('button, .potion-slot, .energy-orb')) return;
     clearSelection();
   });
-  addEventListener('resize', () => {
+  const relayout = () => {
     S3.resize();
     if (G.battle) renderBattle();
     if (G.run && !$('#scr-map').hidden) { M3.resizeMap(); }
     if (!$('#scr-title').hidden) T3.resizeTitle();
-  });
+    if (!$('#scr-ending').hidden) { try { E3.resizeEnding(); } catch (e) { /* noop */ } }
+  };
+  // 화면 틀은 CSS 가 잡는다. 창이 바뀌면 3D 캔버스들이 자기 크기를 다시 읽으면 된다.
+  addEventListener('resize', relayout);
+  addEventListener('orientationchange', () => requestAnimationFrame(relayout));
   addEventListener('visibilitychange', () => { if (document.hidden && G.run) saveRun(G.run); });
 }
 
