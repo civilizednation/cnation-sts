@@ -92,6 +92,9 @@ js/three/
   scene3d.js               전투 씬 (캐릭터/몬스터/연출)
   title3d.js               타이틀 화면 3D 무대 (캐릭터 4종 + 보스 그림자)
   ending3d.js              엔딩 무대 (빛기둥 아래 캐릭터 하나)
+  parts3d.js               3D 부품 사전 (three 를 안 부르는 순수 데이터 — 검사 도구가 쓴다)
+  relicshapes.js           유물 117개의 고유 형태
+  potionshapes.js          물약 30개의 고유 형태
   items3d.js               유물·물약·골드·체력 3D 아이콘 굽기 (PNG 데이터 URL 캐시)
   map3d.js                 3D 지도 (노드 아이콘/경로/레이캐스트)
 ```
@@ -127,6 +130,11 @@ python3 -m http.server 8099
   겹치면 문양을 보고 이름을 또 확인해야 해서 문양을 두는 의미가 없다.
   쓸 문양이 없으면 `js/ui/cardart.js` 에 새로 만든다 (100x100 뷰박스, `[path, 색, 불투명도?]` 의 배열)
 * 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/icons.js` 의 `POWER_GLYPH` 에 아이콘 매핑
+* 유물·물약을 새로 넣으면 `js/three/relicshapes.js` · `potionshapes.js` 에 **고유한 형태**를 만들고
+  **`node tools/check-icons.mjs` 를 돌릴 것** (v1.3.19). 147개가 전부 달라야 한다 —
+  카드 문양과 같은 이유다. 형태를 돌려 쓰고 색만 바꾸지 말 것.
+  `parts3d.js` 는 three.js 를 부르지 않는다 (순수 데이터라야 검사가 Node 에서 돈다).
+  Z축 회전은 +Y 를 `(-sinθ, cosθ)` 로 보낸다 — 기울인 막대의 끝을 잡을 때 부호를 틀리기 쉽다
 * 몬스터의 행동(`moves`)을 고치거나 새로 만들면 **`node tools/check-monsterdex.mjs` 를 돌릴 것**.
   백과사전 몬스터 탭의 설명은 손으로 쓴 글이 아니라 `run` 을 가짜 전투판에 돌려 받아 적은 것이다
   (`js/data/monsterdex.js`). 가짜 판이 모르는 `B.*` 메서드를 부르면 그 행동의 설명이 비어 버리는데,

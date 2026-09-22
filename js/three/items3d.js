@@ -4,6 +4,8 @@
 // ============================================================
 import * as THREE from 'three';
 import { buildPlayer, buildEnemy } from './scene3d.js';
+import { RELIC_SHAPE } from './relicshapes.js';
+import { POTION_SHAPE } from './potionshapes.js';
 
 let renderer = null, scene = null, camera = null, ready = false, broken = false;
 const cache = new Map();
@@ -19,6 +21,44 @@ const mesh = (geo, mat, x = 0, y = 0, z = 0) => {
   m.position.set(x, y, z);
   return m;
 };
+
+// ------------------------------------------------------------
+//  부품 배열(parts3d.js 의 데이터)을 실제 메시로 — three 를 아는 쪽은 여기뿐이다
+// ------------------------------------------------------------
+const PART_GEO = {
+  ball: ([r]) => new THREE.SphereGeometry(r, 12, 10),
+  box: ([w, h, d]) => new THREE.BoxGeometry(w, h, d),
+  cyl: ([rt, rb, h]) => new THREE.CylinderGeometry(rt, rb, h, 10),
+  cone: ([r, h]) => new THREE.ConeGeometry(r, h, 10),
+  torus: ([Rr, r]) => new THREE.TorusGeometry(Rr, r, 7, 20),
+  gem: ([r]) => new THREE.OctahedronGeometry(r, 0),
+  rock: ([r]) => new THREE.IcosahedronGeometry(r, 0),
+  tet: ([r]) => new THREE.TetrahedronGeometry(r),
+  cap: ([r, h]) => new THREE.CapsuleGeometry(r, h, 3, 8),
+};
+
+function buildParts(parts) {
+  const g = new THREE.Group();
+  parts.forEach((p) => {
+    const geo = PART_GEO[p.t];
+    if (!geo) return;
+    const m = new THREE.Mesh(geo(p.a), new THREE.MeshStandardMaterial({
+      color: new THREE.Color(p.c),
+      flatShading: p.flat !== false,
+      roughness: p.rough ?? 0.5,
+      metalness: p.metal ?? 0.3,
+      emissive: new THREE.Color(p.emit || 0x000000),
+      emissiveIntensity: p.ei ?? 1,
+      transparent: !!p.opacity,
+      opacity: p.opacity ?? 1,
+    }));
+    m.position.set(p.x || 0, p.y || 0, p.z || 0);
+    m.rotation.set(p.rx || 0, p.ry || 0, p.rz || 0);
+    m.scale.set(p.sx ?? 1, p.sy ?? 1, p.sz ?? 1);
+    g.add(m);
+  });
+  return g;
+}
 
 function init() {
   if (ready || broken) return ready;
@@ -390,19 +430,27 @@ const RARITY_ACCENT = {
 };
 
 /** 유물 아이콘 (데이터 URL) */
+/**
+ * 유물 아이콘 (데이터 URL).
+ * 유물 117개는 저마다 고유한 형태를 가진다 — js/three/relicshapes.js.
+ * 색까지 뜻에 맞춰 정해 두었으므로 여기서 색을 다시 흩뿌리지 않는다.
+ */
 export function relicIcon3D(def) {
   if (!def || !init()) return null;
   const k = `r:${def.id}`;
   if (cache.has(k)) return cache.get(k);
-  const shape = SHAPES[GLYPH_SHAPE[def.glyph] || 'gem'];
-  // 색상 : 같은 형태끼리도 확실히 구분되도록 색상환 전체 + 채도/명도까지 흩뿌린다
-  const h = hash01(def.id);
-  const h2 = hash01(def.id + '~');
-  const main = new THREE.Color()
-    .setHSL(h, 0.36 + h2 * 0.46, 0.40 + ((h * 7.13) % 1) * 0.28).getHex();
-  const accent = RARITY_ACCENT[def.rarity] || 0xd8d0e8;
   let url = null;
-  try { url = bake(shape({ main, accent })); } catch (e) { url = null; }
+  try {
+    const make = RELIC_SHAPE[def.id];
+    if (make) {
+      url = bake(buildParts(make()));
+    } else {
+      // 새 유물을 넣고 형태를 아직 안 만든 경우의 대비 (check-icons 가 잡아 준다)
+      const h = hash01(def.id);
+      const main = new THREE.Color().setHSL(h, 0.5, 0.5).getHex();
+      url = bake(SHAPES.gem({ main, accent: RARITY_ACCENT[def.rarity] || 0xd8d0e8 }));
+    }
+  } catch (e) { url = null; }
   cache.set(k, url);
   return url;
 }
@@ -457,13 +505,25 @@ function buildPotion(colorHex, kind, rarity) {
 }
 
 /** 물약 아이콘 (데이터 URL) */
+/**
+ * 물약 아이콘 (데이터 URL).
+ * 물약 30개도 저마다 고유한 병과 속을 가진다 — js/three/potionshapes.js.
+ * 각 함수는 물약 고유색(def.color)을 받는다.
+ */
 export function potionIcon3D(def) {
   if (!def || !init()) return null;
   const k = `p:${def.id}`;
   if (cache.has(k)) return cache.get(k);
-  const kind = BOTTLE[Math.floor(hash01(def.id) * BOTTLE.length) % BOTTLE.length];
   let url = null;
-  try { url = bake(buildPotion(def.color, kind, def.rarity)); } catch (e) { url = null; }
+  try {
+    const make = POTION_SHAPE[def.id];
+    if (make) {
+      url = bake(buildParts(make(def.color)));
+    } else {
+      const kind = BOTTLE[Math.floor(hash01(def.id) * BOTTLE.length) % BOTTLE.length];
+      url = bake(buildPotion(def.color, kind, def.rarity));
+    }
+  } catch (e) { url = null; }
   cache.set(k, url);
   return url;
 }
