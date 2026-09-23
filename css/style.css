@@ -922,6 +922,15 @@ html, body {
 .cd-kw .kw-debuff { color: #d99aff; } .cd-kw .kw-buff { color: #ffd24a; }
 .cd-kw .kw-block { color: #7ac8ff; } .cd-kw .kw-energy { color: #ffcf4a; }
 .cd-kw .kw-exhaust { color: #ff9a7a; } .cd-kw .kw-key { color: #9aff9a; }
+
+/* 백과사전 → 용어 → 상태 : POWERS 전체 목록 (문양 없이 글자만) */
+.cx-sec {
+  margin: 12px 0 2px; font-size: 12px; font-weight: 700; color: #a89cc8;
+  border-bottom: 1px solid var(--panel-edge); padding-bottom: 4px;
+}
+.cd-kw.pw-list { padding-left: 13px; gap: 4px; }
+.cd-kw.pw-list li { font-size: 11.8px; line-height: 1.5; }
+.pw-en { margin-left: 4px; font-size: 10px; font-style: normal; color: #6f6889; }
 /* 길게 누르는 중 살짝 눌린 느낌 */
 .card.pressing .card-inner { filter: brightness(1.08); }
 /* 카드 설명의 용어는 색으로만 구분한다 (밑줄 없음) */
