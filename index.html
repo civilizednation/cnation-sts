@@ -33,9 +33,14 @@
       d.classList.add('ios-app');
       if (sh / sw < 2.1) return;
       var adj = 0;
-      try { adj = Number(localStorage.getItem('sts.safeAdjust')) || 0; } catch (e) { adj = 0; }
+      try {
+        // 자동값을 바꾼 판이면 옛 손조정은 safearea.js 가 지운다 — 여기서도 같은 기준으로 본다
+        if (Number(localStorage.getItem('sts.safeAdjustV')) === 2) {
+          adj = Number(localStorage.getItem('sts.safeAdjust')) || 0;
+        }
+      } catch (e) { adj = 0; }
       d.classList.add('ios-notch');
-      d.style.setProperty('--safe-t', Math.max(0, 62 + adj) + 'px');
+      d.style.setProperty('--safe-t', Math.max(0, 82 + adj) + 'px');
     } catch (e) { /* 여백 하나 때문에 게임이 멈추면 안 된다 */ }
   })();
 </script>

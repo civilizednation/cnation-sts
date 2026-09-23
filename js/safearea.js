@@ -18,6 +18,22 @@
 // ============================================================
 
 const KEY = 'sts.safeAdjust';
+const VER_KEY = 'sts.safeAdjustV';
+/**
+ * 자동값을 바꾼 판 번호.
+ * 손조정은 "그때의 자동값에 얼마를 더했나" 이므로, 자동값을 올리면 옛 손조정은 겹친다
+ * (62 에 +20 해 두었는데 자동이 82 가 되면 102 가 되어 버린다). 그래서 한 번 지운다.
+ *   2 → v1.5.7 : 실제 아이폰에서 맞춰 보고 자동값을 62 에서 82 로 올림
+ */
+const VER = 2;
+
+(function migrate() {
+  try {
+    if (Number(localStorage.getItem(VER_KEY)) === VER) return;
+    localStorage.removeItem(KEY);
+    localStorage.setItem(VER_KEY, String(VER));
+  } catch (e) { /* 저장소를 못 써도 게임은 돌아야 한다 */ }
+})();
 
 /** 사용자가 손으로 더한 값(px). 위·아래 같이 움직인다 */
 export function getAdjust() {
@@ -53,7 +69,9 @@ export function iosApp() {
 export function autoInsets() {
   const info = iosApp();
   if (!info) return null;
-  return info.notch ? { top: 62, bottom: 0 } : { top: 20, bottom: 0 };
+  // 82 는 실제 아이폰 15 Pro Max 홈 화면 앱에서 맞춰 본 값이다 (v1.5.7).
+  // 상태바가 59px 이니 23px 이 숨 쉬는 자리로 남는다 — 물약칸을 누르기에 딱 좋았다.
+  return info.notch ? { top: 82, bottom: 0 } : { top: 20, bottom: 0 };
 }
 
 /** 실제로 --safe-t / --safe-b 에 심는다 (인라인이라 어떤 스타일 규칙보다 세다) */
