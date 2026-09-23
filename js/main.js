@@ -3175,7 +3175,7 @@ function adminInfo() {
       + ` · 유물 ${Object.keys(RELICS).length} · 물약 ${Object.keys(POTIONS).length}`],
     ['창', `${innerWidth}×${innerHeight} · dpr ${devicePixelRatio}`],
     ['화면 틀', boxInfo()],
-    ['표시 모드', displayMode()],
+    ['표시 모드', displayMode() + (document.documentElement.classList.contains('ios-app') ? ' · iOS 앱 보정' : '')],
     // 상단 안전 여백이 실제 상태바보다 작으면 맨 윗줄이 상태바 밑에 깔려 ☰ 가 눌리지 않는다
     ['안전 여백', (() => { const s = safeInsets();
       return `위 env ${s.envTop} → 적용 ${s.usedTop} · 아래 env ${s.envBottom} → 적용 ${s.usedBottom}`; })()],

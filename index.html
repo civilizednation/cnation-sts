@@ -13,6 +13,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="description" content="cnation Slay the Spire - 모바일 로그라이크 덱빌더">
 <title>cnation STS — 첨탑을 오르다</title>
+<script>
+  /* iOS 홈 화면 앱은 env(safe-area-inset-*) 을 실제보다 작게 알려 준다 (v1.5.4).
+     그때만 css 가 위쪽 여백에 바닥값을 잡도록 표시를 남긴다 — 브라우저·안드로이드는 그대로 둔다.
+     첫 그림이 그려지기 전에 붙어야 해서 여기(head)에 인라인으로 둔다. */
+  (function () {
+    var ua = navigator.userAgent || '';
+    var ios = /iPhone|iPod|iPad/.test(ua)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var app = navigator.standalone === true
+      || (window.matchMedia && matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches);
+    if (ios && app) document.documentElement.classList.add('ios-app');
+  })();
+</script>
 <!-- 웹폰트는 저장소 안에 동봉한다 (fonts/ · tools/fetch-fonts.py 가 만든다).
      예전에는 구글 폰트 CDN 을 차단형 <link> 로 불러서, 폰트 서버가 느리거나 막힌 망에서는
      그만큼 게임 시작이 늦어졌다. 이제 같은 출처에서 받으므로 그 의존이 없다.

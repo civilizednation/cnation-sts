@@ -42,16 +42,19 @@
   --vh: calc(var(--app-h) / 100);
 }
 
-/* iOS 홈 화면 앱(standalone)에서 env(safe-area-inset-top) 이 실제 상태바보다
-   작게(또는 0으로) 오는 일이 있다 — black-translucent 로 설치된 아이콘이 그렇다.
-   그러면 맨 윗줄이 상태바·다이내믹 아일랜드 밑에 깔리는데, 그 자리의 탭은 iOS 가
-   가져가므로 오른쪽 위 메뉴(☰)를 눌러도 아무 반응이 없다 (v1.5.2 에 실제로 겪은 일).
-   아래 홈 인디케이터가 있는 기기(노치·다이내믹 아일랜드)면 위도 그만큼은 비워 둔다.
-   인디케이터가 없는 옛 기기는 아래가 0 이라 이 식도 0 이 되어 아무 영향이 없다. */
-@media (display-mode: standalone), (display-mode: fullscreen) {
-  :root {
-    --safe-t: max(env(safe-area-inset-top, 0px), calc(env(safe-area-inset-bottom, 0px) * 1.7));
-  }
+/* ★ iOS 홈 화면 앱은 env(safe-area-inset-*) 을 실제보다 작게 알려 준다 (v1.5.4).
+   아이폰 15 Pro Max 에서 직접 재어 보니 위 30px · 아래 22px 로 왔다 — 실제로는 59 · 34 다.
+   그 값을 그대로 믿으면 맨 윗줄이 상태바·다이내믹 아일랜드 밑에 깔리고,
+   그 자리의 탭은 iOS 가 가져가므로 물약칸·메뉴가 눌리지 않는다.
+
+   그래서 iOS 홈 화면 앱에서만(`html.ios-app`, index.html 의 인라인 스크립트가 붙인다)
+   아래 인디케이터 크기로 위쪽 바닥값을 잡되 62px 에서 끊는다.
+     · 아래가 22 로 오면 22×3 = 66 → 62 (다이내믹 아일랜드 59 를 넘어선다)
+     · 제대로 34 로 오는 기기도 34×3 = 102 → 62 로 같은 값에 걸린다
+     · 홈 버튼 기기는 아래가 0 이라 이 식도 0 — 옛 기기에는 아무 영향이 없다
+   브라우저에서 열었을 때와 안드로이드에는 이 규칙이 걸리지 않는다. */
+html.ios-app {
+  --safe-t: max(env(safe-area-inset-top, 0px), min(calc(env(safe-area-inset-bottom, 0px) * 3), 62px));
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
