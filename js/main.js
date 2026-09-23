@@ -1412,6 +1412,12 @@ function renderMap() {
 function enterRoom(pos) {
   SFX.tap();
   const run = G.run;
+  // ★ 방에 들어가기 **전** 상태를 저장해 둔다 (v1.5.8).
+  // 예전에는 들어간 뒤에 저장해서, 전투 도중 앱을 강제로 닫으면 그 전투가 통째로
+  // 건너뛰어진 채 다음 층 지도에서 시작했다 (보상도 없이). 이제 다시 열면 그 방
+  // 바로 앞 지도로 돌아오고, 씨앗도 그대로라 같은 전투를 처음부터 다시 치른다.
+  // 방 안에서 무언가를 고르면(상점 구매·보상 받기 등) 그때 현재 상태로 다시 저장된다.
+  saveRun(run);
   const node = run.enterNode(pos);
   renderTopbar('#map-top');
   const type = node.type;
@@ -1429,7 +1435,6 @@ function enterRoom(pos) {
     else if (real === ROOM.TREASURE) showTreasure();
     else showEvent();
   }
-  saveRun(run);
 }
 
 // ============================================================
@@ -3548,7 +3553,11 @@ function bind() {
   // 화면 틀은 CSS 가 잡는다. 창이 바뀌면 3D 캔버스들이 자기 크기를 다시 읽으면 된다.
   addEventListener('resize', relayout);
   addEventListener('orientationchange', () => requestAnimationFrame(relayout));
-  addEventListener('visibilitychange', () => { if (document.hidden && G.run) saveRun(G.run); });
+  addEventListener('visibilitychange', () => {
+    // 전투 중에는 저장하지 않는다 (v1.5.8). 저장하면 "이 방에 이미 들어갔다" 는 상태가 남아
+    // 앱을 강제로 닫았을 때 그 전투가 건너뛰어진다. 저장해 둔 것은 방에 들어가기 전 상태다.
+    if (document.hidden && G.run && !G.battle) saveRun(G.run);
+  });
 }
 
 BGM.init();
