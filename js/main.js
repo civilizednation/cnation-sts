@@ -796,7 +796,7 @@ const RELIC_GROUPS = [
   ['all', '전체'], ['starter', '시작'], ['common', '일반'],
   ['uncommon', '고급'], ['rare', '희귀'], ['boss', '보스'],
 ];
-const WORD_GROUPS = [['term', '용어'], ['state', '상태']];
+const WORD_GROUPS = [['term', '용어'], ['state', '상태 아이콘']];
 let codexTab = 'card';
 let codexSub = 'red';
 
@@ -1017,25 +1017,27 @@ function codexWords(body) {
 }
 
 /**
- * 전투 중 몸에 붙는 모든 상태.
- * 설명을 여기 따로 적지 않고 POWERS 의 것을 그대로 받아 적는다 —
- * 따로 적어 두면 수치를 고칠 때 반드시 둘이 갈라진다 (몬스터 도감과 같은 원칙).
+ * 상태 아이콘 — 전투 중 이름표 옆에 붙는 그림 118종.
+ * 그림은 `js/ui/powerart.js`, 설명은 `js/engine/powers.js` 것을 그대로 받아 적는다.
+ * 설명을 여기 따로 적어 두면 수치를 고칠 때 반드시 둘이 갈라진다 (몬스터 도감과 같은 원칙).
  */
 function codexStates(body) {
   const all = Object.entries(POWERS).filter(([, p]) => !p.hidden && p.name);
   body.appendChild(el('p', { class: 'cx-count',
-    text: `${all.length}개 · 수치 1 기준으로 적었습니다 (쌓일수록 커집니다)` }));
-  // 문양은 붙이지 않는다 — 118종 중 50종에 아직 고유 문양이 없어 별표만 늘어선다
-  [['약화 — 나쁜 상태', 'debuff', 'kw-debuff'],
-    ['강화 — 좋은 상태', 'buff', 'kw-buff']].forEach(([title, kind, cls]) => {
+    text: `${all.length}종 · 전투 중 이름표 옆에 이 그림으로 붙습니다 (수치 1 기준 설명)` }));
+  [['약화 — 나쁜 상태', 'debuff', 'kw-debuff', '#d99aff'],
+    ['강화 — 좋은 상태', 'buff', 'kw-buff', '#ffd98a']].forEach(([title, kind, cls, color]) => {
     const arr = all.filter(([, p]) => (p.type === 'debuff') === (kind === 'debuff'));
-    body.appendChild(el('h4', { class: 'cx-sec', text: `${title} · ${arr.length}개` }));
-    const ul = el('ul', { class: 'cd-kw pw-list' });
+    body.appendChild(el('h4', { class: 'cx-sec', text: `${title} · ${arr.length}종` }));
+    const ul = el('ul', { class: 'pw-list' });
     arr.forEach(([id, p]) => {
-      ul.appendChild(el('li', {},
+      const li = el('li', {});
+      li.appendChild(el('span', { class: 'pw-ico', html: powerIcon(id, 22, color) }));
+      li.appendChild(el('span', { class: 'pw-txt' },
         el('b', { class: cls, text: p.name }),
         p.en ? el('em', { class: 'pw-en', text: p.en }) : null,
         ' — ' + powerDesc(id, 1)));
+      ul.appendChild(li);
     });
     body.appendChild(ul);
   });

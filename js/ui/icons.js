@@ -3,6 +3,8 @@
 //  모두 100x100 뷰박스 기준 path 데이터
 // ============================================================
 
+import { POWER_ART } from './powerart.js';
+
 export const GLYPH = {
   sword: 'M50 6 L60 26 L57 62 L50 70 L43 62 L40 26 Z M30 62 H70 L66 72 H34 Z M46 72 h8 v20 h-8 Z',
   twinSword: 'M28 10 L38 26 L34 68 L28 74 L22 66 L24 26 Z M72 10 L78 26 L74 68 L68 74 L62 66 L66 26 Z M16 60 h28 l-3 8 H19 Z M56 60 h28 l-3 8 H59 Z',
@@ -129,25 +131,6 @@ export const GLYPH = {
   runeF: 'M50 4 L58 34 L90 34 L64 54 L74 88 L50 68 L26 88 L36 54 L10 34 L42 34 Z M50 40 a8 8 0 1 1 -0.1 0 Z',
 };
 
-/** 힘/상태이상 아이콘 매핑 */
-export const POWER_GLYPH = {
-  strength: 'fist', dexterity: 'wing', vigor: 'sword', artifact: 'star', thorns: 'thorn',
-  plated: 'shieldSpike', metallicize: 'shield', regeneration: 'heart', ritual: 'ring',
-  demonForm: 'skull', barricade: 'shieldSpike', darkEmbrace: 'wing', evolve: 'spiral',
-  feelNoPain: 'shield', fireBreathing: 'flame', flameBarrier: 'flame', juggernaut: 'hammer',
-  rupture: 'blood', brutality: 'blood', corruption: 'skull', berserk: 'lightning',
-  combust: 'flame', doubleTap: 'twinSword', rage: 'fist', intangible: 'ring', buffer: 'shield',
-  mayhem: 'spiral', panache: 'star', sadistic: 'claw', magnetism: 'ring', nextTurnBlock: 'shield',
-  vulnerable: 'drop', weak: 'arrowDown', frail: 'shield', poison: 'drop', entangled: 'chain',
-  confused: 'spiral', noDraw: 'minus', drawReduction: 'minus', constricted: 'chain',
-  shackled: 'chain', bias: 'arrowDown', hex: 'skull', noBlock: 'minus', bomb: 'bomb',
-  loseStrength: 'arrowDown', gainStrengthEOT: 'arrowUp', duplication: 'twinSword',
-  curlUp: 'shield', angry: 'fist', spore: 'drop', malleable: 'shield', flight: 'wing',
-  painfulStabs: 'claw', sharpHide: 'thorn', modeShift: 'gear', beatOfDeath: 'skull',
-  invincible: 'shield', timeWarp: 'hourglass', slow: 'hourglass', minion: 'star',
-  unawakened: 'eye', curiosity: 'eye', lifeLink: 'chain', reactive: 'lightning',
-  split: 'spiral', enrage: 'fist', anger: 'fist', stasis: 'ring', thievery: 'claw',
-};
 
 export const INTENT_GLYPH = {
   attack: 'sword', attackDefend: 'twinSword', attackDebuff: 'claw', attackBuff: 'axe',
@@ -174,8 +157,18 @@ export function svgIcon(glyphName, { size = 20, color = '#fff', stroke = null, c
     <path d="${d}" fill="${fill}" ${strokeAttr} ${extra}/></svg>`;
 }
 
+/**
+ * 상태 아이콘 (v1.4.3).
+ * 그림은 `js/ui/powerart.js` 에 있다 — 118종이 전부 다른 모양이고,
+ * color 는 '@a' 자리에 들어갈 상태 색이다 (버프 노랑 / 디버프 보라).
+ * 여기서 별표로 떨어지는 상태가 생기면 `node tools/check-powerart.mjs` 가 잡는다.
+ */
 export function powerIcon(id, size = 18, color = '#fff') {
-  return svgIcon(POWER_GLYPH[id] || 'star', { size, color });
+  const art = POWER_ART[id];
+  if (!art) return svgIcon('star', { size, color });
+  return `<svg class="ic pw-ic" viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true">`
+    + art.map(([d, c, o]) => `<path d="${d}" fill="${c === '@a' ? color : c}"${o ? ` opacity="${o}"` : ''}/>`).join('')
+    + '</svg>';
 }
 export function intentIcon(type, size = 26) {
   return svgIcon(INTENT_GLYPH[type] || 'question', { size, color: INTENT_COLOR[type] || '#fff' });

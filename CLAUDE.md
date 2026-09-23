@@ -89,6 +89,7 @@ js/ui/
   icons.js                 SVG 글리프 + 아이콘 매핑
   cardview.js              카드 렌더러 + ART 맵 (카드id → 문양 이름)
   cardart.js               카드 문양 224종 (색을 쓰는 여러 겹). '@a' 는 카드 종류 색
+  powerart.js              상태 아이콘 118종 (여러 겹 · 도형 헬퍼로 짠다). '@a' 는 버프/디버프 색
 js/three/
   scene3d.js               전투 씬 (캐릭터/몬스터/연출)
   title3d.js               타이틀 화면 3D 무대 (캐릭터 4종 + 보스 그림자)
@@ -136,7 +137,11 @@ python3 -m http.server 8099
   같은 계열 안에서 문양이 겹치면 안 된다 — 익숙해지면 글자보다 문양을 먼저 보는데,
   겹치면 문양을 보고 이름을 또 확인해야 해서 문양을 두는 의미가 없다.
   쓸 문양이 없으면 `js/ui/cardart.js` 에 새로 만든다 (100x100 뷰박스, `[path, 색, 불투명도?]` 의 배열)
-* 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/icons.js` 의 `POWER_GLYPH` 에 아이콘 매핑
+* 새 힘/상태이상은 `js/engine/powers.js` 에 정의 + `js/ui/powerart.js` 에 **고유한 상태 아이콘**을
+  그리고 **`node tools/check-powerart.mjs` 를 돌릴 것** (v1.4.3). 118종이 전부 달라야 한다 —
+  유물·카드와 같은 이유다. `POWER_GLYPH` 는 없앴다 (모양 없는 것이 50종이나 별표로 떨어지고 있었다).
+  path 는 손으로 쓰지 말고 `powerart.js` 위쪽 도형 헬퍼를 쓸 것 — 같은 자를 써야 검사가 중복을 잡는다.
+  사용자에게 말할 때는 "문양" 이 아니라 **"상태 아이콘"** 이라고 부른다 (카드=문양, 유물·물약=아이콘)
 * 유물·물약을 새로 넣으면 `js/three/relicshapes.js` · `potionshapes.js` 에 **고유한 형태**를 만들고
   **`node tools/check-icons.mjs` 를 돌릴 것** (v1.4.0). 147개가 전부 달라야 한다 —
   카드 문양과 같은 이유다. 형태를 돌려 쓰고 색만 바꾸지 말 것.
