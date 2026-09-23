@@ -782,6 +782,8 @@ html, body {
   color: var(--gold); letter-spacing: 1.5px; font-family: var(--font);
 }
 .adm-quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; width: 100%; }
+.adm-adjust { display: flex; gap: 6px; justify-content: center; margin: 8px 0 2px; }
+.adm-adjust .btn { flex: 1 1 0; padding: 9px 0; }
 .adm-info { width: 100%; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 .adm-info li {
   display: flex; justify-content: space-between; align-items: baseline; gap: 10px;

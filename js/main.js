@@ -3,6 +3,7 @@
 // ============================================================
 import { $, $$, el, sleep, clamp } from './util.js';
 import { appRect, boxInfo, safeInsets, displayMode } from './viewport.js';
+import { apply as applySafeArea, safeAreaInfo, getAdjust, setAdjust, autoInsets } from './safearea.js';
 import { VERSION } from './version.js';
 import { CHANGELOG } from './data/changelog.js';
 import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, setSaveKey, getSaveKey, ACT_RANGES } from './engine/run.js';
@@ -46,6 +47,10 @@ const G = {
   busy: false,
   pendingPotion: null,
 };
+// ★ 화면 여백부터 잡는다 (v1.5.6). index.html 의 인라인 스크립트는 iOS 홈 화면 앱에서
+// 캐시에 묶여 안 돌 수 있어, 확실히 새로 받아 오는 이 모듈에서 한 번 더 심는다.
+applySafeArea();
+
 window.G = G;
 window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // 자동 테스트용
@@ -3032,6 +3037,8 @@ function showAdmin() {
         onclick: () => { SFX.tap(); adminPickChar('엔딩을 볼 캐릭터', (id) => adminShowEnding(id)); } }),
       el('button', { class: 'btn ghost', text: '이 기기 정보',
         onclick: () => { SFX.tap(); adminInfo(); } }),
+      el('button', { class: 'btn ghost', text: '화면 여백 조정',
+        onclick: () => { SFX.tap(); adminSafeArea(); } }),
 
       el('div', { class: 'modal-actions' },
         el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })),
@@ -3153,6 +3160,39 @@ function adminShowEnding(charId) {
   showEnding(run);
 }
 
+/**
+ * 화면 여백 조정 (v1.5.6).
+ * 기기마다 상태바 높이를 제대로 알려 주지 않는 경우가 있어, 손으로 맞출 수 있게 둔 손잡이다.
+ * 값은 이 기기에만 저장된다 (localStorage).
+ */
+function adminSafeArea() {
+  const auto = autoInsets();
+  const build = (box) => {
+    box.replaceChildren();
+    const adj = getAdjust();
+    const top = (auto ? auto.top : 0) + adj;
+    box.append(
+      modalTitle('화면 여백 조정'),
+      el('p', { class: 'adm-warn',
+        text: '화면 맨 윗줄이 상태바에 가리면 여기서 더 내릴 수 있습니다. 이 기기에만 저장됩니다.' }),
+      el('div', { class: 'adm-info' },
+        el('li', {}, el('span', { text: '자동으로 잡은 값' }), el('b', { text: auto ? `위 ${auto.top} · 아래 ${auto.bottom}` : '없음 (브라우저 기본값)' })),
+        el('li', {}, el('span', { text: '손으로 더한 값' }), el('b', { text: `${adj >= 0 ? '+' : ''}${adj}px` })),
+        el('li', {}, el('span', { text: '지금 위쪽 여백' }), el('b', { text: `${Math.max(0, top)}px` }))),
+      el('div', { class: 'adm-adjust' },
+        el('button', { class: 'btn sm', text: '− 10', onclick: () => { SFX.tap(); setAdjust(getAdjust() - 10); build(box); } }),
+        el('button', { class: 'btn sm', text: '− 4', onclick: () => { SFX.tap(); setAdjust(getAdjust() - 4); build(box); } }),
+        el('button', { class: 'btn sm', text: '+ 4', onclick: () => { SFX.tap(); setAdjust(getAdjust() + 4); build(box); } }),
+        el('button', { class: 'btn sm', text: '+ 10', onclick: () => { SFX.tap(); setAdjust(getAdjust() + 10); build(box); } })),
+      el('button', { class: 'btn ghost', text: '처음으로 되돌리기',
+        onclick: () => { SFX.tap(); setAdjust(0); build(box); } }),
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn', text: '뒤로', onclick: () => { SFX.tap(); closeModal(); showAdmin(); } })),
+    );
+  };
+  openModal((box) => build(box), { stack: true });
+}
+
 function adminInfo() {
   const a = Account.state();
   let bytes = 0; let keys = 0;
@@ -3179,6 +3219,7 @@ function adminInfo() {
       + (document.documentElement.classList.contains('ios-app') ? ' · iOS 앱' : '')
       + (document.documentElement.classList.contains('ios-notch') ? ' · 노치 보정 켜짐' : '')],
     ['기기 화면', `${screen.width}×${screen.height} · 세로비 ${(Math.max(screen.width, screen.height) / Math.max(1, Math.min(screen.width, screen.height))).toFixed(2)}`],
+    ['화면 여백', safeAreaInfo()],
     // 상단 안전 여백이 실제 상태바보다 작으면 맨 윗줄이 상태바 밑에 깔려 ☰ 가 눌리지 않는다
     ['안전 여백', (() => { const s = safeInsets();
       return `위 env ${s.envTop} → 적용 ${s.usedTop} · 아래 env ${s.envBottom} → 적용 ${s.usedBottom}`; })()],
