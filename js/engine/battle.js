@@ -21,6 +21,9 @@ export class Actor {
 const A = TYPE.ATTACK, S = TYPE.SKILL, P = TYPE.POWER;
 export const STANCE_KR = { neutral: '무자세', wrath: '분노', calm: '평온', divinity: '신성' };
 
+/** 구체 동작 사이에 두는 시간 — 두 번, 세 번 들어갔다는 게 보여야 한다 (v1.5.1) */
+const ORB_GAP = 300;
+
 export class Battle {
   constructor(run, encounter, ui) {
     this.run = run;
@@ -56,6 +59,11 @@ export class Battle {
   // ---------------- 로그 / 연출 ----------------
   log(msg) { this.ui.log && this.ui.log(msg); }
   fx(type, data = {}) { this.ui.fx && this.ui.fx(type, data); }
+  /**
+   * 연출 사이를 띄운다 (v1.5.1).
+   * 구체가 두 번 터지는 카드는 이 틈이 없으면 한 번 터진 것처럼 보인다.
+   */
+  async pace(ms = ORB_GAP) { if (!this.over) await this.wait(ms); }
   async wait(ms) { if (this.ui.wait) await this.ui.wait(ms); }
   render() { this.ui.render && this.ui.render(); }
 
@@ -201,7 +209,7 @@ export class Battle {
         this.tookDamageThisTurn = true;
         if (kind === 'attack') {
           const sd = this.pow(dst, 'staticDischarge');
-          if (sd > 0) this.channel('lightning', sd);
+          if (sd > 0) for (let i = 0; i < sd; i++) this.channelOne('lightning');
         }
       }
       if (dst.hp <= 0) this.killEnemy(dst, src);
@@ -643,41 +651,70 @@ export class Battle {
   // ================= 구체 (디펙트) =================
   get focus() { return this.pow(this.player, 'focus'); }
 
-  channel(type, n = 1) {
+  /**
+   * 구체 하나를 충전한다 (연출 사이를 띄우지 않는다).
+   * 피해 처리 도중처럼 기다릴 수 없는 곳에서 쓴다 — 보통은 `channel()` 을 쓸 것.
+   */
+  channelOne(type) {
+    if (this.orbs.length >= this.orbSlots) {
+      const old = this.orbs.shift();
+      if (old) this.orbEffect(old, true);
+    }
+    this.orbs.push({ type, amount: type === 'dark' ? 6 + this.focus : 0 });
+    this.channeledCount[type] = (this.channeledCount[type] || 0) + 1;
+    this.render();
+    this.fx('orbChannel', { type });
+  }
+  /** 구체 충전. 여러 개면 하나씩 사이를 띄워 몇 개가 들어갔는지 보이게 한다 (v1.5.1) */
+  async channel(type, n = 1) {
     for (let i = 0; i < n; i++) {
-      if (this.orbs.length >= this.orbSlots) this.evoke(1);
-      this.orbs.push({ type, amount: type === 'dark' ? 6 + this.focus : 0 });
-      this.channeledCount[type] = (this.channeledCount[type] || 0) + 1;
-      this.render();
-      this.fx('orbChannel', { type });
+      if (i) await this.pace();
+      // 자리가 없으면 맨 앞 구체가 밀려나며 발동한다 — 터지는 걸 보여 주고 새 구체를 넣는다
+      if (this.orbs.length >= this.orbSlots) {
+        const old = this.orbs.shift();
+        if (old) { this.orbEffect(old, true); this.render(); await this.pace(); }
+      }
+      this.channelOne(type);
     }
     this.render();
   }
-  /** 맨 앞 구체를 times 번 발동하고 제거 */
-  evokeFront(times = 1) {
+  /** 맨 앞 구체를 times 번 발동하고 제거 (이중 시전처럼 한 구체를 여러 번) */
+  async evokeFront(times = 1) {
     const orb = this.orbs.shift();
     if (!orb) return;
-    for (let i = 0; i < times; i++) this.orbEffect(orb, true, i === 0);
-    this.render();
+    for (let i = 0; i < times; i++) {
+      if (i) await this.pace();
+      this.orbEffect(orb, true, i === 0);
+      this.render();
+    }
   }
   /** 맨 앞 구체 발동 후 제거 */
-  evoke(n = 1, keep = false) {
+  async evoke(n = 1, keep = false) {
     for (let i = 0; i < n; i++) {
+      if (i) await this.pace();
       const orb = keep ? this.orbs[0] : this.orbs.shift();
       if (!orb) return;
       this.orbEffect(orb, true, !keep);
+      this.render();
     }
-    this.render();
   }
-  evokeAll(times = 1) {
+  async evokeAll(times = 1) {
     const list = this.orbs.slice();
     this.orbs = [];
-    for (let t = 0; t < times; t++) list.forEach((o) => this.orbEffect(o, true));
-    this.render();
+    let first = true;
+    for (let t = 0; t < times; t++) {
+      for (const o of list) {
+        if (!first) await this.pace();
+        first = false;
+        this.orbEffect(o, true);
+        this.render();
+      }
+    }
   }
   /**
    * 구체 효과. evokeIt=true 면 발동, false 면 턴 종료 패시브.
    * consume 은 연출에서 구체를 실제로 소모해 보일지 여부 (다중 시전 대응).
+   * 하나치 동작이라 여기서는 기다리지 않는다 — 사이를 띄우는 일은 부르는 쪽이 한다.
    */
   orbEffect(orb, evokeIt, consume = true, orbIndex = 0) {
     const f = this.focus;
@@ -721,10 +758,14 @@ export class Battle {
     if (this.pow(target, 'lockOn') > 0) d = Math.floor(d * 1.5);
     this.applyDamage(this.player, target, d, null, 'orb');
   }
-  /** 턴 종료 시 구체 패시브 */
-  orbPassives() {
-    this.orbs.slice().forEach((o, i) => this.orbEffect(o, false, true, i));
-    this.render();
+  /** 턴 종료 시 구체 패시브 — 왼쪽부터 하나씩 */
+  async orbPassives() {
+    const list = this.orbs.slice();
+    for (let i = 0; i < list.length; i++) {
+      if (i) await this.pace();
+      this.orbEffect(list[i], false, true, i);
+      this.render();
+    }
   }
   removeOrb(i = 0) { this.orbs.splice(i, 1); this.render(); }
 
@@ -891,7 +932,7 @@ export class Battle {
     this.energy += this.baseEnergy;
 
     // 턴 시작 상태이상
-    this.startActorTurn(this.player);
+    await this.startActorTurn(this.player);
     if (this.over) return;
 
     // 유물 훅
@@ -942,7 +983,7 @@ export class Battle {
   }
 
   /** 해당 액터의 턴 시작 효과 (중독, 힘 증가 등) */
-  startActorTurn(a) {
+  async startActorTurn(a) {
     // 중독
     const poison = this.pow(a, 'poison');
     if (poison > 0) {
@@ -969,12 +1010,14 @@ export class Battle {
       // 디펙트
       if (this.run.hasRelic('emotionChip') && this.tookDamageLastTurn && this.orbs.length) {
         this.log('감정 칩 작동!');
-        this.evokeAll();
+        await this.evokeAll();
       }
       this.tookDamageLastTurn = this.tookDamageThisTurn;
       this.tookDamageThisTurn = false;
       const loop = this.pow(a, 'loop');
-      if (loop > 0 && this.orbs[0]) for (let i = 0; i < loop; i++) this.orbEffect(this.orbs[0], false, true, 0);
+      if (loop > 0 && this.orbs[0]) {
+        for (let i = 0; i < loop; i++) { if (i) await this.pace(); this.orbEffect(this.orbs[0], false, true, 0); }
+      }
       const cai = this.pow(a, 'creativeAI');
       for (let i = 0; i < cai; i++) { const c = this.randomCardOfType(P); if (c) this.addCardToHand(c); }
       const hw = this.pow(a, 'helloWorld');
@@ -1009,7 +1052,7 @@ export class Battle {
   }
 
   /** 턴 종료 효과 */
-  endActorTurn(a) {
+  async endActorTurn(a) {
     if (a.isPlayer) {
       const met = this.pow(a, 'metallicize');
       if (met > 0) this.gainBlock(a, met, null, true);
@@ -1035,7 +1078,7 @@ export class Battle {
       if (this.stance === 'divinity') this.setStance('neutral');
       if (this.pow(a, 'blasphemer') > 0) { this.log('신성모독의 대가...'); a.hp = 0; this.playerDeathCheck(); }
       // 디펙트 : 구체 패시브
-      if (this.orbs.length) this.orbPassives();
+      if (this.orbs.length) await this.orbPassives();
     } else {
       const met = this.pow(a, 'metallicize');
       if (met > 0) this.gainBlock(a, met, null, true);
@@ -1117,7 +1160,7 @@ export class Battle {
       this.loseHp(this.player, 1, card);
       this.exhaustCard(card);
       this.cardInPlay = null; this.playing = false;
-      this.afterCardPlayed(card);
+      await this.afterCardPlayed(card);
       return true;
     }
 
@@ -1138,7 +1181,7 @@ export class Battle {
     }
 
     this.cardInPlay = null;
-    this.afterCardPlayed(card);
+    await this.afterCardPlayed(card);
 
     // 카드 행선지
     const corrupted = card.type === S && this.pow(this.player, 'corruption') > 0;
@@ -1155,7 +1198,7 @@ export class Battle {
     return true;
   }
 
-  afterCardPlayed(card) {
+  async afterCardPlayed(card) {
     this.cardsPlayedThisTurn++;
     this.cardsPlayedThisCombat++;
     if (card.type === P) this.powersPlayed++;
@@ -1210,7 +1253,7 @@ export class Battle {
     // 디펙트
     if (card.type === P) {
       const storm = this.pow(this.player, 'storm');
-      if (storm > 0) this.channel('lightning', storm);
+      if (storm > 0) await this.channel('lightning', storm);
       const hs = this.pow(this.player, 'heatsinks');
       if (hs > 0) this.draw(hs);
     }
@@ -1233,7 +1276,7 @@ export class Battle {
       const ctx = { B: this, p: this.player, t, c, x: 0 };
       await c.def.play(ctx);
     }
-    this.afterCardPlayed(c);
+    await this.afterCardPlayed(c);
     if (exhaustAfter || c.exhaust) this.exhaustCard(c);
     else if (c.type !== P) this.discardPile.push(c);
     if (this.checkEnd()) this.finish();
@@ -1276,7 +1319,7 @@ export class Battle {
     if (this.prideQueue.length) { this.prideQueue.forEach((c) => this.drawPile.push(c)); this.prideQueue = []; }
 
     this.run.relicHook('onTurnEnd', this);
-    this.endActorTurn(this.player);
+    await this.endActorTurn(this.player);
     this.render();
     await this.wait(500);
 
@@ -1294,7 +1337,7 @@ export class Battle {
   async enemyTurn() {
     for (const e of this.enemies.slice()) {
       if (!e.alive || this.over) continue;
-      this.startActorTurn(e);
+      await this.startActorTurn(e);
       if (!e.alive || this.over) continue;
       const mvId = e.nextMove || e.def.ai(this, e);
       const mv = e.def.moves[mvId];
@@ -1307,7 +1350,7 @@ export class Battle {
         await this.wait(520);
       }
       if (this.over) return;
-      this.endActorTurn(e);
+      await this.endActorTurn(e);
       if (e.alive) this.rollIntent(e);
       this.render();
     }

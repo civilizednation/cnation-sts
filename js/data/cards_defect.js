@@ -31,18 +31,18 @@ def({ id: 'defend_b', name: '방어', en: 'Defend', type: S, rarity: RARITY.BASI
 def({ id: 'zap', name: '전기 충격', en: 'Zap', type: S, rarity: RARITY.BASIC, color: B_, cost: 1, costU: 0, target: NONE,
   noPool: true,
   text: D(() => `번개 구체를 1개 충전합니다.`),
-  play: (x) => x.B.channel('lightning') });
+  play: async (x) => x.B.channel('lightning') });
 
 def({ id: 'dualcast', name: '이중 시전', en: 'Dualcast', type: S, rarity: RARITY.BASIC, color: B_, cost: 1, costU: 0, target: NONE,
   noPool: true,
   text: D(() => `가장 앞의 구체를 2번 발동합니다.`),
-  play: (x) => x.B.evokeFront(2) });
+  play: async (x) => x.B.evokeFront(2) });
 
 // ---------------- 일반 18 ----------------
 def({ id: 'ballLightning', name: '볼 라이트닝', en: 'Ball Lightning', type: A, rarity: RARITY.COMMON, color: B_, cost: 1, target: E,
   dmg: 7, dmgU: 10,
   text: D((c) => `피해를 ${c.v('dmg')} 주고 번개 구체를 1개 충전합니다.`),
-  play: (x) => { x.B.attack(x, x.c.v('dmg')); x.B.channel('lightning'); } });
+  play: async (x) => { x.B.attack(x, x.c.v('dmg')); await x.B.channel('lightning'); } });
 
 def({ id: 'barrage', name: '연사', en: 'Barrage', type: A, rarity: RARITY.COMMON, color: B_, cost: 1, target: E,
   dmg: 4, dmgU: 6,
@@ -71,7 +71,7 @@ def({ id: 'claw', name: '발톱', en: 'Claw', type: A, rarity: RARITY.COMMON, co
 def({ id: 'coldSnap', name: '한파', en: 'Cold Snap', type: A, rarity: RARITY.COMMON, color: B_, cost: 1, target: E,
   dmg: 6, dmgU: 9,
   text: D((c) => `피해를 ${c.v('dmg')} 주고 냉기 구체를 1개 충전합니다.`),
-  play: (x) => { x.B.attack(x, x.c.v('dmg')); x.B.channel('frost'); } });
+  play: async (x) => { x.B.attack(x, x.c.v('dmg')); await x.B.channel('frost'); } });
 
 def({ id: 'compileDriver', name: '컴파일 드라이버', en: 'Compile Driver', type: A, rarity: RARITY.COMMON, color: B_, cost: 1, target: E,
   dmg: 7, dmgU: 10,
@@ -81,7 +81,7 @@ def({ id: 'compileDriver', name: '컴파일 드라이버', en: 'Compile Driver',
 def({ id: 'coolheaded', name: '냉정', en: 'Coolheaded', type: S, rarity: RARITY.COMMON, color: B_, cost: 1, target: NONE,
   mag: 1, magU: 2,
   text: D((c) => `냉기 구체를 1개 충전하고 카드를 ${c.v('mag')}장 뽑습니다.`),
-  play: (x) => { x.B.channel('frost'); x.B.draw(x.c.v('mag')); } });
+  play: async (x) => { await x.B.channel('frost'); x.B.draw(x.c.v('mag')); } });
 
 def({ id: 'goForTheEyes', name: '눈을 노려라', en: 'Go for the Eyes', type: A, rarity: RARITY.COMMON, color: B_, cost: 0, target: E,
   dmg: 3, dmgU: 4, mag: 1, magU: 2,
@@ -110,7 +110,7 @@ def({ id: 'rebound', name: '반동', en: 'Rebound', type: A, rarity: RARITY.COMM
 
 def({ id: 'recursion', name: '재귀', en: 'Recursion', type: S, rarity: RARITY.COMMON, color: B_, cost: 1, costU: 0, target: NONE,
   text: D(() => `가장 앞의 구체를 발동한 뒤 다시 충전합니다.`),
-  play: (x) => { const o = x.B.orbs[0]; if (!o) return; const t = o.type; x.B.evokeFront(1); x.B.channel(t); } });
+  play: async (x) => { const o = x.B.orbs[0]; if (!o) return; const t = o.type; await x.B.evokeFront(1); await x.B.channel(t); } });
 
 def({ id: 'stack', name: '스택', en: 'Stack', type: S, rarity: RARITY.COMMON, color: B_, cost: 1, target: SELF,
   mag: 0, magU: 3,
@@ -175,23 +175,31 @@ def({ id: 'capacitor', name: '축전기', en: 'Capacitor', type: P, rarity: RARI
 def({ id: 'chaos', name: '혼돈', en: 'Chaos', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 1, target: NONE,
   mag: 1, magU: 2,
   text: D((c) => `무작위 구체를 ${c.v('mag')}개 충전합니다.`),
-  play: (x) => { for (let i = 0; i < x.c.v('mag'); i++) x.B.channel(x.B.rng.pick(['lightning', 'frost', 'dark', 'plasma'])); } });
+  play: async (x) => { for (let i = 0; i < x.c.v('mag'); i++) await x.B.channel(x.B.rng.pick(['lightning', 'frost', 'dark', 'plasma'])); } });
 
 def({ id: 'chill', name: '오한', en: 'Chill', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 0, target: NONE,
   exhaust: true, exhaustU: false,
   text: D(() => `적 1체당 냉기 구체를 1개 충전합니다.`),
-  play: (x) => x.B.channel('frost', x.B.living().length) });
+  play: async (x) => x.B.channel('frost', x.B.living().length) });
 
 def({ id: 'consume', name: '흡수', en: 'Consume', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 2, target: SELF,
   mag: 2, magU: 3,
   text: D((c) => `집중을 ${c.v('mag')} 얻습니다. 구체 슬롯이 1 감소합니다.`),
-  play: (x) => { x.B.addPower(x.p, 'focus', x.c.v('mag'), x.p); x.B.orbSlots = Math.max(0, x.B.orbSlots - 1); if (x.B.orbs.length > x.B.orbSlots) x.B.evokeFront(1); } });
+  play: async (x) => { x.B.addPower(x.p, 'focus', x.c.v('mag'), x.p); x.B.orbSlots = Math.max(0, x.B.orbSlots - 1); if (x.B.orbs.length > x.B.orbSlots) await x.B.evokeFront(1); } });
 
 def({ id: 'darkness', name: '어둠', en: 'Darkness', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 1, target: NONE,
   text: D((c) => `암흑 구체를 1개 충전합니다.${c.upgraded ? ' 모든 암흑 구체의 패시브를 발동합니다.' : ''}`),
-  play: (x) => {
-    x.B.channel('dark');
-    if (x.c.upgraded) x.B.orbs.forEach((o, i) => { if (o.type === 'dark') x.B.orbEffect(o, false, true, i); });
+  play: async (x) => {
+    await x.B.channel('dark');
+    if (x.c.upgraded) {
+      // 암흑 구체들이 차례로 부풀어 오르게 하나씩 띄운다
+      const list = x.B.orbs.map((o, i) => [o, i]).filter(([o]) => o.type === 'dark');
+      for (let k = 0; k < list.length; k++) {
+        if (k) await x.B.pace();
+        x.B.orbEffect(list[k][0], false, true, list[k][1]);
+      }
+      x.B.render();
+    }
   } });
 
 def({ id: 'defragment', name: '조각 모음', en: 'Defragment', type: P, rarity: RARITY.UNCOMMON, color: B_, cost: 1, target: SELF,
@@ -202,7 +210,7 @@ def({ id: 'defragment', name: '조각 모음', en: 'Defragment', type: P, rarity
 def({ id: 'doomAndGloom', name: '파멸과 우울', en: 'Doom and Gloom', type: A, rarity: RARITY.UNCOMMON, color: B_, cost: 2, target: ALL,
   dmg: 10, dmgU: 14,
   text: D((c) => `모든 적에게 피해를 ${c.v('dmg')} 주고 암흑 구체를 1개 충전합니다.`),
-  play: (x) => { x.B.attackAll(x, x.c.v('dmg')); x.B.channel('dark'); } });
+  play: async (x) => { x.B.attackAll(x, x.c.v('dmg')); await x.B.channel('dark'); } });
 
 def({ id: 'doubleEnergy', name: '이중 에너지', en: 'Double Energy', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 1, costU: 0, target: NONE,
   exhaust: true,
@@ -226,7 +234,7 @@ def({ id: 'forceField', name: '역장', en: 'Force Field', type: S, rarity: RARI
 
 def({ id: 'fusion', name: '융합', en: 'Fusion', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 2, costU: 1, target: NONE,
   text: D(() => `플라즈마 구체를 1개 충전합니다.`),
-  play: (x) => x.B.channel('plasma') });
+  play: async (x) => x.B.channel('plasma') });
 
 def({ id: 'geneticAlgorithm', name: '유전 알고리즘', en: 'Genetic Algorithm', type: A, rarity: RARITY.UNCOMMON, color: B_, cost: 1, target: E,
   dmg: 1, mag: 2, magU: 3, exhaust: true,
@@ -236,7 +244,7 @@ def({ id: 'geneticAlgorithm', name: '유전 알고리즘', en: 'Genetic Algorith
 def({ id: 'glacier', name: '빙하', en: 'Glacier', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 2, target: SELF,
   blk: 7, blkU: 10,
   text: D((c) => `방어도를 ${c.v('blk')} 얻고 냉기 구체를 2개 충전합니다.`),
-  play: (x) => { x.B.gainBlock(x.p, x.c.v('blk'), x.c); x.B.channel('frost', 2); } });
+  play: async (x) => { x.B.gainBlock(x.p, x.c.v('blk'), x.c); await x.B.channel('frost', 2); } });
 
 def({ id: 'heatsinks', name: '방열판', en: 'Heatsinks', type: P, rarity: RARITY.UNCOMMON, color: B_, cost: 1, target: SELF,
   mag: 1, magU: 2,
@@ -332,7 +340,7 @@ def({ id: 'sunder', name: '분쇄', en: 'Sunder', type: A, rarity: RARITY.UNCOMM
 def({ id: 'tempest', name: '폭풍우', en: 'Tempest', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: -1, target: NONE,
   exhaust: true,
   text: D((c) => `번개 구체를 X${c.upgraded ? '+1' : ''}개 충전합니다.`),
-  play: (x) => x.B.channel('lightning', x.x + (x.c.upgraded ? 1 : 0)) });
+  play: async (x) => x.B.channel('lightning', x.x + (x.c.upgraded ? 1 : 0)) });
 
 def({ id: 'whiteNoise', name: '백색 소음', en: 'White Noise', type: S, rarity: RARITY.UNCOMMON, color: B_, cost: 1, costU: 0, target: NONE,
   exhaust: true,
@@ -387,16 +395,16 @@ def({ id: 'echoForm', name: '메아리 형상', en: 'Echo Form', type: P, rarity
 def({ id: 'electrodynamics', name: '전기 역학', en: 'Electrodynamics', type: P, rarity: RARITY.RARE, color: B_, cost: 2, target: SELF,
   mag: 2, magU: 3,
   text: D((c) => `번개 구체가 모든 적을 공격하게 됩니다. 번개 구체를 ${c.v('mag')}개 충전합니다.`),
-  play: (x) => { x.B.addPower(x.p, 'electro', 1, x.p); x.B.channel('lightning', x.c.v('mag')); } });
+  play: async (x) => { x.B.addPower(x.p, 'electro', 1, x.p); await x.B.channel('lightning', x.c.v('mag')); } });
 
 def({ id: 'fission', name: '핵분열', en: 'Fission', type: S, rarity: RARITY.RARE, color: B_, cost: 0, target: NONE,
   exhaust: true, exhaustU: false,
   text: D((c) => c.upgraded
     ? `모든 구체를 발동한 뒤 제거하고, 구체 1개당 에너지 1과 카드 1장을 얻습니다.`
     : `모든 구체를 제거하고, 구체 1개당 에너지 1과 카드 1장을 얻습니다.`),
-  play: (x) => {
+  play: async (x) => {
     const n = x.B.orbs.length;
-    if (x.c.upgraded) x.B.evokeAll();
+    if (x.c.upgraded) await x.B.evokeAll();
     else x.B.orbs = [];
     x.B.gainEnergy(n); x.B.draw(n);
   } });
@@ -414,16 +422,16 @@ def({ id: 'machineLearningCard', name: '기계 학습', en: 'Machine Learning', 
 def({ id: 'meteorStrike', name: '유성 강타', en: 'Meteor Strike', type: A, rarity: RARITY.RARE, color: B_, cost: 5, costU: 4, target: E,
   dmg: 24, dmgU: 30,
   text: D((c) => `피해를 ${c.v('dmg')} 주고 플라즈마 구체를 3개 충전합니다.`),
-  play: (x) => { x.B.attack(x, x.c.v('dmg')); x.B.channel('plasma', 3); } });
+  play: async (x) => { x.B.attack(x, x.c.v('dmg')); await x.B.channel('plasma', 3); } });
 
 def({ id: 'multiCast', name: '다중 시전', en: 'Multi-Cast', type: S, rarity: RARITY.RARE, color: B_, cost: -1, target: NONE,
   text: D((c) => `가장 앞의 구체를 X${c.upgraded ? '+1' : ''}번 발동합니다.`),
-  play: (x) => x.B.evokeFront(x.x + (x.c.upgraded ? 1 : 0)) });
+  play: async (x) => x.B.evokeFront(x.x + (x.c.upgraded ? 1 : 0)) });
 
 def({ id: 'rainbow', name: '무지개', en: 'Rainbow', type: S, rarity: RARITY.RARE, color: B_, cost: 2, target: NONE,
   exhaust: true, exhaustU: false,
   text: D(() => `번개, 냉기, 암흑 구체를 각각 1개씩 충전합니다.`),
-  play: (x) => { x.B.channel('lightning'); x.B.channel('frost'); x.B.channel('dark'); } });
+  play: async (x) => { await x.B.channel('lightning'); await x.B.channel('frost'); await x.B.channel('dark'); } });
 
 def({ id: 'reboot', name: '재부팅', en: 'Reboot', type: S, rarity: RARITY.RARE, color: B_, cost: 0, target: NONE,
   mag: 4, magU: 6, exhaust: true,

@@ -938,6 +938,16 @@ html, body {
 .pw-list b { font-weight: 700; }
 .pw-list .kw-debuff { color: #d99aff; } .pw-list .kw-buff { color: #ffd24a; }
 .pw-en { margin-left: 4px; font-size: 10px; font-style: normal; color: #6f6889; }
+
+/* 백과사전 상세 글 (v1.5.1) — 한 줄 설명 밑에 붙는 긴 글.
+   공간을 더 쓰더라도 읽기 좋게 : 들여쓰고 왼쪽에 옅은 선을 둔다 */
+.cx-detail, .cd-detail {
+  margin: 5px 0 0; font-size: 11.4px; line-height: 1.62; color: #a49bbb;
+  padding-left: 8px; border-left: 2px solid #3a3150;
+}
+.cx-detail b, .cd-detail b { color: #d6cdea; font-weight: 700; }
+.cd-detail { font-size: 12px; margin-top: 2px; }
+.cd-kw li .cx-detail { margin-top: 4px; }
 /* 길게 누르는 중 살짝 눌린 느낌 */
 .card.pressing .card-inner { filter: brightness(1.08); }
 /* 카드 설명의 용어는 색으로만 구분한다 (밑줄 없음) */

@@ -6,12 +6,15 @@
 //    빠져 있으면 "적에게 조준을 3 부여합니다" 만 보이고 조준이 뭔지는
 //    어디에도 안 나온다 (v1.4.2 에서 실제로 그랬다).
 //  ▸ 사전에 같은 낱말이 두 번 들어가면 안 된다 (앞의 것만 쓰이고 뒤는 죽는다)
+//  ▸ 백과사전 상세 글(statehelp/cardhelp)이 실제로 있는 것을 가리키는지 (v1.5.1)
 //
 //      node tools/check-keywords.mjs
 // ============================================================
 import { CARD_DEFS, Card } from '../js/data/cards.js';
 import { POWERS } from '../js/engine/powers.js';
 import { KEYWORDS, KEYWORD_MAP } from '../js/data/keywords.js';
+import { STATE_HELP } from '../js/data/statehelp.js';
+import { CARD_HELP } from '../js/data/cardhelp.js';
 
 /** 이름이 같을 뿐 그 상태를 가리키는 게 아닌 것들 — 검사에서 뺀다 */
 const NOT_A_POWER = {
@@ -61,7 +64,17 @@ Object.keys(NOT_A_POWER).forEach((name) => {
   if (KEYWORD_MAP.has(name) && !POWERS[name]) { /* 사전에 따로 있는 건 정상 */ }
 });
 
+// ---- 백과사전 상세 글 ----
+const needHelp = Object.entries(POWERS).filter(([, p]) => !p.hidden && p.name).map(([id]) => id);
+const noHelp = needHelp.filter((id) => !STATE_HELP[id]);
+const ghostHelp = Object.keys(STATE_HELP).filter((id) => !POWERS[id]);
+if (noHelp.length) { console.log(`✗ 상세 설명 없는 상태 ${noHelp.length}종 : ${noHelp.join(', ')}`); fail++; }
+if (ghostHelp.length) { console.log(`✗ POWERS 에 없는 상세 설명 : ${ghostHelp.join(', ')}`); fail++; }
+const ghostCard = Object.keys(CARD_HELP).filter((id) => !CARD_DEFS[id]);
+if (ghostCard.length) { console.log(`✗ 없는 카드의 상세 설명 : ${ghostCard.join(', ')}`); fail++; }
+
 console.log(`\n용어 ${KEYWORDS.length}개 · 카드 글에 나오는 상태 ${hits.size}종`
   + ` (예외 ${Object.keys(NOT_A_POWER).filter((n) => hits.has(n)).length}종)`);
+console.log(`상세 설명 : 상태 ${Object.keys(STATE_HELP).length}종 · 카드 ${Object.keys(CARD_HELP).length}장`);
 console.log(fail ? `\nFAIL ${fail}건` : '\nOK 카드 글의 모든 상태에 설명이 있다');
 process.exit(fail ? 1 : 0);

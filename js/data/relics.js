@@ -376,7 +376,7 @@ R({ id: 'ringOfTheSnake', name: '뱀의 반지', en: 'Ring of the Snake', rarity
 
 R({ id: 'crackedCore', name: '금 간 핵', en: 'Cracked Core', rarity: 'starter', glyph: 'ring',
   desc: '전투 시작 시 번개 구체를 1개 충전합니다.',
-  onBattleStart: (B) => B.channel('lightning') });
+  onBattleStart: (B) => B.channelOne('lightning') });
 
 R({ id: 'pureWater', name: '순수한 물', en: 'Pure Water', rarity: 'starter', glyph: 'potion',
   desc: '전투 시작 시 기적 카드 1장을 손에 넣습니다.',

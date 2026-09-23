@@ -12,6 +12,8 @@ import { Battle } from './engine/battle.js';
 import { POWERS, powerName, powerDesc } from './engine/powers.js';
 import { CARD_DEFS, Card, mk, TYPE_KR, RARITY_KR } from './data/cards.js';
 import { KEYWORDS as KEYWORD_LIST, findKeywords } from './data/keywords.js';
+import { STATE_HELP } from './data/statehelp.js';
+import { CARD_HELP } from './data/cardhelp.js';
 import { RELICS, RARITY_KR as RELIC_RARITY_KR } from './data/relics.js';
 import { POTIONS } from './data/potions.js';
 import { EVENTS, pickEvent } from './data/events.js';
@@ -779,6 +781,32 @@ function showHelp() {
 }
 
 // ============================================================
+//  백과사전 상세 글 (v1.5.1)
+//  짧은 한 줄은 powers.js / keywords.js 가, 긴 설명은 statehelp.js / cardhelp.js 가 낸다.
+// ============================================================
+
+/** 상세 글에는 `**굵게**` 하나만 허용한다 (글을 그대로 심지 않고 반드시 이걸 거칠 것) */
+function richHTML(text) {
+  const esc = String(text).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  return esc.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+}
+/** 상세 글 문단 하나 (없으면 아무것도 만들지 않는다) */
+function detailP(text, cls = 'cx-detail') {
+  return text ? el('p', { class: cls, html: richHTML(text) }) : null;
+}
+const POWER_BY_NAME = new Map(Object.entries(POWERS).filter(([, p]) => p.name).map(([id, p]) => [p.name, id]));
+/**
+ * 용어 하나의 상세 글.
+ * 사전에 직접 적어 둔 것이 먼저고, 없으면 같은 이름의 상태 설명을 끌어다 쓴다 —
+ * 그래야 조준·중독처럼 상태이면서 용어인 낱말을 두 군데 적지 않아도 된다.
+ */
+function termDetail(k) {
+  if (k.detail) return k.detail;
+  const id = POWER_BY_NAME.get(k.name);
+  return id ? (STATE_HELP[id] || '') : '';
+}
+
+// ============================================================
 //  백과사전 — 카드 / 유물 / 물약 / 몬스터 / 캐릭터 / 용어
 // ============================================================
 const CODEX_TABS = [
@@ -873,7 +901,7 @@ function codexCards(body) {
   ids.forEach((id) => {
     const card = codexCard(id);
     const ce = renderCard(card, { small: true });
-    ce.addEventListener('click', () => { if (!consumedLongPress()) { SFX.cardPick(); showCardDetail(card); } });
+    ce.addEventListener('click', () => { if (!consumedLongPress()) { SFX.cardPick(); showCardDetail(card, { full: true }); } });
     grid.appendChild(ce);
   });
   body.appendChild(grid);
@@ -1010,8 +1038,11 @@ function codexWords(body) {
   if (codexSub === 'state') { codexStates(body); return; }
   body.appendChild(el('p', { class: 'cx-count', text: `${KEYWORD_LIST.length}개` }));
   const ul = el('ul', { class: 'cd-kw glossary' });
-  KEYWORD_LIST.forEach(([name, desc, cls]) => {
-    ul.appendChild(el('li', {}, el('b', { class: cls, text: name }), ' — ' + desc));
+  KEYWORD_LIST.forEach(([name, desc, cls, detail]) => {
+    const li = el('li', {}, el('b', { class: cls, text: name }), ' — ' + desc);
+    const more = detailP(termDetail({ name, detail }));
+    if (more) li.appendChild(more);
+    ul.appendChild(li);
   });
   body.appendChild(ul);
 }
@@ -1033,10 +1064,13 @@ function codexStates(body) {
     arr.forEach(([id, p]) => {
       const li = el('li', {});
       li.appendChild(el('span', { class: 'pw-ico', html: powerIcon(id, 22, color) }));
-      li.appendChild(el('span', { class: 'pw-txt' },
+      const txt = el('span', { class: 'pw-txt' },
         el('b', { class: cls, text: p.name }),
         p.en ? el('em', { class: 'pw-en', text: p.en }) : null,
-        ' — ' + powerDesc(id, 1)));
+        ' — ' + powerDesc(id, 1));
+      const more = detailP(STATE_HELP[id]);
+      if (more) txt.appendChild(more);
+      li.appendChild(txt);
       ul.appendChild(li);
     });
     body.appendChild(ul);
@@ -1475,16 +1509,12 @@ function battleFx(type, d) {
       SFX.orbCharge();
       break;
     case 'orbFire': {
-      // 구체마다 자기 위치에서, 서로 겹치지 않게 시차를 두고 발사
-      const delay = d.evoke ? 0 : (d.index || 0) * 0.22;
-      S3.fxOrb(d.type, d.targets, d.evoke, B.player, d.index || 0, delay);
-      const playSfx = () => {
-        if (d.type === 'lightning') SFX.thunder();
-        else if (d.type === 'frost') SFX.ice();
-        else if (d.type === 'dark') SFX.darkBlast();
-        else SFX.plasmaPop();
-      };
-      if (delay > 0) setTimeout(playSfx, delay * 1000); else playSfx();
+      // 구체는 자기 자리(index)에서 발사한다. 사이 띄우기는 엔진이 한다 (battle.js 의 pace)
+      S3.fxOrb(d.type, d.targets, d.evoke, B.player, d.index || 0, 0);
+      if (d.type === 'lightning') SFX.thunder();
+      else if (d.type === 'frost') SFX.ice();
+      else if (d.type === 'dark') SFX.darkBlast();
+      else SFX.plasmaPop();
       if (d.evoke && d.type === 'lightning') S3.fxScreenShake(0.8);
       break;
     }
@@ -1691,8 +1721,12 @@ const CARD_FLAG_DESC = [
   ['innate', '내재', '전투 시작 시 항상 손에 들고 시작합니다.'],
 ];
 
-/** 카드 한 장의 상세 설명 화면 */
-function showCardDetail(card) {
+/**
+ * 카드 한 장의 상세 설명 화면.
+ * opts.full 이면 백과사전용 — 카드마다의 보충 설명과 용어 상세 글까지 전부 펼친다.
+ * 전투 중 길게 누르기에서는 짧게 보는 것이 목적이라 펼치지 않는다.
+ */
+function showCardDetail(card, opts = {}) {
   const d = card.def || {};
   // 아직 강화하지 않은 카드는 강화 후 설명도 함께 보여 준다
   let after = null;
@@ -1730,14 +1764,28 @@ function showCardDetail(card) {
     }
     box.appendChild(eff);
 
+    // 백과사전에서 열었으면 이 카드만의 보충 설명
+    if (opts.full && CARD_HELP[card.id]) {
+      const sec = el('div', { class: 'cd-sec' });
+      sec.appendChild(el('h4', { text: '자세히' }));
+      sec.appendChild(detailP(CARD_HELP[card.id], 'cd-detail'));
+      box.appendChild(sec);
+    }
+
     // 이 카드에 등장하는 용어
     const words = findKeywords(card.text() + ' ' + (after ? after.text() : ''));
     if (words.length) {
       const sec = el('div', { class: 'cd-sec' });
       sec.appendChild(el('h4', { text: '용어' }));
       const ul = el('ul', { class: 'cd-kw' });
-      words.forEach((k) => ul.appendChild(el('li', {},
-        el('b', { class: k.cls, text: k.name }), ' — ' + k.desc)));
+      words.forEach((k) => {
+        const li = el('li', {}, el('b', { class: k.cls, text: k.name }), ' — ' + k.desc);
+        if (opts.full) {
+          const more = detailP(termDetail(k));
+          if (more) li.appendChild(more);
+        }
+        ul.appendChild(li);
+      });
       sec.appendChild(ul);
       box.appendChild(sec);
     }
@@ -2864,6 +2912,7 @@ function showSettings() {
     const inRun = !!G.run && $('#scr-title').hidden;
     if (inRun) {
       box.append(
+        el('button', { class: 'btn ghost', text: '백과사전', onclick: () => { closeModal(); showCodex('card', 'red'); } }),
         el('button', { class: 'btn ghost', text: '게임 방법', onclick: () => { closeModal(); showHelp(); } }),
         el('button', { class: 'btn ghost', text: '유물 목록', onclick: () => { closeModal(); showRelicList(); } }),
         el('button', { class: 'btn danger', text: '런 포기 (타이틀로)', onclick: () => {
