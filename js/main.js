@@ -1099,8 +1099,6 @@ function renderTopbar(target) {
 
   top.appendChild(potionRow());
   top.appendChild(el('div', { class: 'tb-floor', text: `${run.act}막 · ${run.floor || 0}층` }));
-  top.appendChild(el('button', { class: 'menu-btn', html: '<span></span><span></span><span></span>',
-    onclick: () => { SFX.tap(); showGameMenu(); } }));
   bar.appendChild(top);
 
   // --- 2행 : 유물 (왼쪽부터 차례로) ---
@@ -1114,7 +1112,12 @@ function renderTopbar(target) {
     b.addEventListener('click', (e) => showTooltip(e, d.name, d.desc + (ro.counter ? `\n(${ro.counter})` : '')));
     r.appendChild(b);
   });
-  bar.appendChild(el('div', { class: 'tb-row2' + (run.relics.length ? '' : ' empty') }, r));
+  // 메뉴 버튼은 유물과 같은 줄 오른쪽 끝에 둔다 (v1.5.3).
+  // 맨 윗줄은 아이폰 상태바에 너무 가까워 손가락이 자꾸 빗나갔다.
+  const menu = el('button', { class: 'menu-btn', onclick: () => { SFX.tap(); showGameMenu(); } },
+    el('i', { class: 'menu-bars', html: '<span></span><span></span><span></span>' }),
+    el('b', { text: '메뉴' }));
+  bar.appendChild(el('div', { class: 'tb-row2' }, r, menu));
 }
 
 /** 데이터 URL 이 있으면 3D 아이콘 <img>, 없으면 SVG 로 대체 */
@@ -1181,16 +1184,22 @@ function potionRow() {
 
 /** 전투/지도 공통 메뉴 */
 function showGameMenu() {
+  // 이름만 보고도 무엇인지 알 수 있게 한 줄 설명을 함께 적는다 (v1.5.3)
+  const items = [
+    ['내 덱 보기', '지금 가지고 있는 카드 전부', () => showDeck()],
+    ['내 유물 보기', '가진 유물과 그 효과', () => showRelicList()],
+    ['백과사전', '카드 · 유물 · 물약 · 몬스터 · 용어 사전', () => showCodex('card', 'red')],
+    ['게임 방법', '규칙과 화면 보는 법', () => showHelp()],
+    ['설정', '소리 · 백과사전 · 런 포기', () => showSettings()],
+  ];
   openModal((box) => {
-    box.append(
-      modalTitle('메뉴'),
-      el('button', { class: 'btn', text: '덱 보기', onclick: () => { closeModal(); showDeck(); } }),
-      el('button', { class: 'btn ghost', text: '유물 목록', onclick: () => { closeModal(); showRelicList(); } }),
-      el('button', { class: 'btn ghost', text: '백과사전', onclick: () => { closeModal(); showCodex('card', 'red'); } }),
-      el('button', { class: 'btn ghost', text: '게임 방법', onclick: () => { closeModal(); showHelp(); } }),
-      el('button', { class: 'btn ghost', text: '설정', onclick: () => { closeModal(); showSettings(); } }),
-      el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '닫기', onclick: () => closeModal() })),
-    );
+    box.append(modalTitle('메뉴'));
+    items.forEach(([name, desc, go]) => {
+      box.appendChild(el('button', { class: 'btn menu-item', onclick: () => { SFX.tap(); closeModal(); go(); } },
+        el('b', { text: name }), el('small', { text: desc })));
+    });
+    box.append(el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn', text: '닫기', onclick: () => { SFX.tap(); closeModal(); } })));
   });
 }
 
