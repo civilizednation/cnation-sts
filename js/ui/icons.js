@@ -158,7 +158,7 @@ export function svgIcon(glyphName, { size = 20, color = '#fff', stroke = null, c
 }
 
 /**
- * 상태 아이콘 (v1.4.3).
+ * 상태 아이콘 (v1.5.0).
  * 그림은 `js/ui/powerart.js` 에 있다 — 118종이 전부 다른 모양이고,
  * color 는 '@a' 자리에 들어갈 상태 색이다 (버프 노랑 / 디버프 보라).
  * 여기서 별표로 떨어지는 상태가 생기면 `node tools/check-powerart.mjs` 가 잡는다.
