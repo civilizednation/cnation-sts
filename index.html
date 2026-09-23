@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0910">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<!-- black-translucent : 화면이 상태바 밑까지 올라온다 (배경이 위까지 이어져 보기 좋다).
+     대신 상단 안전 여백을 CSS 가 반드시 비워 줘야 한다 — 안 그러면 맨 윗줄이 상태바에 깔리고
+     그 자리의 탭은 iOS 가 가져가서 메뉴(☰)가 안 눌린다 (v1.5.2 에 실제로 겪은 일).
+     css/style.css 의 --safe-t 바닥값이 그 일을 한다. `black` 으로 바꾸지 말 것 —
+     그러면 iOS 가 상태바 자리를 따로 비워 주는데 CSS 여백과 겹쳐 위가 두 배로 빈다. -->
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="description" content="cnation Slay the Spire - 모바일 로그라이크 덱빌더">
 <title>cnation STS — 첨탑을 오르다</title>

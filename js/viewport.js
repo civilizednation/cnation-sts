@@ -32,3 +32,37 @@ export function boxInfo() {
     + ` · 비율 ${(b.width / b.height).toFixed(3)}`
     + (isBoxed() ? ' (여백 있음)' : ' (꽉 참)');
 }
+
+/**
+ * 지금 화면에 실제로 적용된 안전 여백(px) — CSS 의 env() 와 --safe-t 를 자로 재어 읽는다 (v1.5.2).
+ * iOS 홈 화면 앱에서 이 값이 실제 상태바보다 작게 오면 맨 윗줄이 상태바 밑에 깔리고,
+ * 그 자리의 탭은 iOS 가 가져가므로 메뉴(☰)가 눌리지 않는다. 그때 진짜 값을 보려고 둔 자다.
+ */
+export function safeInsets() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:0;height:0;visibility:hidden;'
+    + 'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);';
+  const probe2 = document.createElement('div');
+  probe2.style.cssText = 'position:fixed;left:-9999px;top:0;width:0;height:0;visibility:hidden;'
+    + 'padding-top:var(--safe-t);padding-bottom:var(--safe-b);';
+  document.body.append(probe, probe2);
+  const a = getComputedStyle(probe), b = getComputedStyle(probe2);
+  const out = {
+    envTop: Math.round(parseFloat(a.paddingTop) || 0),
+    envBottom: Math.round(parseFloat(a.paddingBottom) || 0),
+    usedTop: Math.round(parseFloat(b.paddingTop) || 0),
+    usedBottom: Math.round(parseFloat(b.paddingBottom) || 0),
+  };
+  probe.remove(); probe2.remove();
+  return out;
+}
+
+/** 홈 화면에 설치해 띄운 것인지 (iOS 는 fullscreen 을 standalone 으로 알려 준다) */
+export function displayMode() {
+  const modes = ['fullscreen', 'standalone', 'minimal-ui'];
+  for (const m of modes) {
+    if (window.matchMedia && matchMedia(`(display-mode: ${m})`).matches) return m;
+  }
+  if (navigator.standalone) return 'standalone(iOS)';
+  return 'browser';
+}

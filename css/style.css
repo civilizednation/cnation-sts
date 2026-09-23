@@ -42,6 +42,18 @@
   --vh: calc(var(--app-h) / 100);
 }
 
+/* iOS 홈 화면 앱(standalone)에서 env(safe-area-inset-top) 이 실제 상태바보다
+   작게(또는 0으로) 오는 일이 있다 — black-translucent 로 설치된 아이콘이 그렇다.
+   그러면 맨 윗줄이 상태바·다이내믹 아일랜드 밑에 깔리는데, 그 자리의 탭은 iOS 가
+   가져가므로 오른쪽 위 메뉴(☰)를 눌러도 아무 반응이 없다 (v1.5.2 에 실제로 겪은 일).
+   아래 홈 인디케이터가 있는 기기(노치·다이내믹 아일랜드)면 위도 그만큼은 비워 둔다.
+   인디케이터가 없는 옛 기기는 아래가 0 이라 이 식도 0 이 되어 아무 영향이 없다. */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root {
+    --safe-t: max(env(safe-area-inset-top, 0px), calc(env(safe-area-inset-bottom, 0px) * 1.7));
+  }
+}
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0; height: 100%; overflow: hidden;
@@ -379,7 +391,8 @@ html, body {
   background: #1a1524; border: 1px solid #5a4a78; border-radius: 6px; padding: 0 3px; color: #ffd98a;
 }
 .menu-btn {
-  width: 30px; height: 28px; flex: 0 0 auto; border-radius: 7px; padding: 6px 5px;
+  /* 손가락으로 누르는 자리라 조금 키웠다 (v1.5.2) */
+  width: 34px; height: 32px; flex: 0 0 auto; border-radius: 8px; padding: 7px 6px;
   background: rgba(24,19,32,.9); border: 1px solid #453a5a;
   display: flex; flex-direction: column; justify-content: space-between;
 }

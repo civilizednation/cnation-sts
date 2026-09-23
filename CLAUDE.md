@@ -131,6 +131,13 @@ python3 -m http.server 8099
   상자 크기는 `css/style.css` 의 `--app-w` / `--app-h` 가 `min()` 으로 정한다.
   **js 로 재서 심지 말 것** — 첫 프레임에 전체 너비로 한 번 깜빡인다.
   창 좌표가 필요하면 `js/viewport.js` 의 `appRect()` 로 상자 안에 가둔다
+* **아이폰 홈 화면 앱에서 화면 맨 위·맨 아래에 누르는 것을 두지 말 것** (v1.5.2).
+  `black-translucent` 로 설치된 아이콘은 `env(safe-area-inset-top)` 이 실제 상태바보다
+  작게 온다(약 30px). 그러면 맨 윗줄이 상태바 밑에 깔리는데 **그 자리의 탭은 iOS 가 가져간다** —
+  버튼이 그려져 있어도 눌리지 않는다. `--safe-t` 는 홈 화면 앱일 때 아래 인디케이터 크기로
+  바닥값을 잡아 둔다 (`css/style.css` 맨 위 `@media (display-mode: standalone)`).
+  meta 의 `black-translucent` 를 `black` 으로 바꾸지 말 것 — 여백이 두 배가 된다.
+  의심스러우면 관리자 모드 → 이 기기 정보의 `안전 여백` · `메뉴 버튼 위치` 를 볼 것
 * `jsdelivr` 등 외부 CDN 은 이 환경에서 차단됨 → three.js 는 `vendor/` 로컬 파일 사용 유지
 * 웹폰트도 같은 이유로 `fonts/` 에 동봉한다 (v1.3.3). 구글 폰트를 다시 `<link>` 로 부르지 말 것 —
   차단형 `<link>` 는 스크립트 실행까지 붙잡아 게임 시작을 늦춘다

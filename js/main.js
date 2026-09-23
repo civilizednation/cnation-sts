@@ -2,7 +2,7 @@
 //  cnation STS — 메인 컨트롤러
 // ============================================================
 import { $, $$, el, sleep, clamp } from './util.js';
-import { appRect, boxInfo } from './viewport.js';
+import { appRect, boxInfo, safeInsets, displayMode } from './viewport.js';
 import { VERSION } from './version.js';
 import { CHANGELOG } from './data/changelog.js';
 import { Run, ROOM, ROOM_KR, saveRun, loadRun, clearSave, setSaveKey, getSaveKey, ACT_RANGES } from './engine/run.js';
@@ -3166,6 +3166,16 @@ function adminInfo() {
       + ` · 유물 ${Object.keys(RELICS).length} · 물약 ${Object.keys(POTIONS).length}`],
     ['창', `${innerWidth}×${innerHeight} · dpr ${devicePixelRatio}`],
     ['화면 틀', boxInfo()],
+    ['표시 모드', displayMode()],
+    // 상단 안전 여백이 실제 상태바보다 작으면 맨 윗줄이 상태바 밑에 깔려 ☰ 가 눌리지 않는다
+    ['안전 여백', (() => { const s = safeInsets();
+      return `위 env ${s.envTop} → 적용 ${s.usedTop} · 아래 env ${s.envBottom} → 적용 ${s.usedBottom}`; })()],
+    ['메뉴 버튼 위치', (() => {
+      const b = document.querySelector('.topbar .menu-btn');
+      if (!b) return '(지금 화면에 없음)';
+      const r = b.getBoundingClientRect();
+      return `화면 위에서 ${Math.round(r.top)}~${Math.round(r.bottom)}px`;
+    })()],
   ];
   openModal((box) => {
     box.append(modalTitle('이 기기 정보'));
