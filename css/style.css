@@ -1121,6 +1121,11 @@ button.opt-row:active { background: #2a2238; }
    (액자 69px 안에 그림 50px : 원래 46px 안에 28px 이던 것보다 훨씬 꽉 찬다) */
 #codex-body .cx-row .relic-big { width: 69px; height: 69px; border-radius: 16px; }
 #codex-body .cx-row .relic-big svg { width: 47px; height: 47px; }
+/* 시작 보너스에서 이미 고른 것 (v1.5.9) */
+.neow-got {
+  margin: 2px 0 6px; font-size: 11.5px; line-height: 1.5; color: #9ad9a8;
+  background: rgba(40,70,50,.35); border: 1px solid #2f5a3f; border-radius: 8px; padding: 6px 9px;
+}
 .choice-row {
   width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px;
   background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 10px; text-align: left;

@@ -171,9 +171,13 @@ export const NEOW_SECRET = {
   },
 };
 
-/** 이번 런에서 제시할 보너스 4개 (혜택 3 + 대가 1) */
+/**
+ * 이번 런에서 제시할 보너스 **5개** (혜택 4 + 대가 1).
+ * 이 가운데 **2개**를 고르고 시작한다 (v1.5.9 · main.js 의 `NEOW_PICKS`).
+ * 대가가 따르는 것은 언제나 하나뿐이라, 둘 다 대가를 고르는 일은 없다.
+ */
 export function rollNeowOptions(rng) {
-  const benefits = rng.shuffle(NEOW_BENEFITS.slice()).slice(0, 3);
+  const benefits = rng.shuffle(NEOW_BENEFITS.slice()).slice(0, 4);
   const drawback = rng.pick(NEOW_DRAWBACKS);
   return rng.shuffle([...benefits, drawback]);
 }

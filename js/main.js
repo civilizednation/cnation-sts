@@ -681,7 +681,10 @@ function showCharacterSelect() {
   });
 }
 
-/** 시작 보너스 (네오우의 축복) */
+/** 시작 보너스에서 고르는 개수 (v1.5.9 — 하나에서 둘로) */
+const NEOW_PICKS = 2;
+
+/** 시작 보너스 (네오우의 축복) — 다섯 가운데 둘을 고른다 */
 function showNeow() {
   const run = G.run;
   const opts = rollNeowOptions(run.rng);
@@ -697,35 +700,57 @@ function showNeow() {
     gainRelic: async (id) => gainRelic(id),
     relicName: (id) => (RELICS[id] ? RELICS[id].name : '유물'),
   };
-  openModal((box) => {
-    box.append(
-      modalTitle('시작 보너스'),
-      modalText(`${run.charName}(으)로 첨탑에 오릅니다.\n첫 걸음을 내딛기 전, 하나를 선택하세요.`),
-    );
-    const take = async (o) => {
-      SFX.relic();
-      closeModal();
-      const msg = await o.apply(run, ctx);
-      saveRun(run);
-      openModal((b2) => {
-        b2.append(
-          modalTitle(run.charName),
-          modalText(`${msg}\n\n1층부터 50층까지 오릅니다.\n17층과 34층의 보스를 처치하면 체력이 모두 회복됩니다.`),
-          el('div', { class: 'modal-actions' },
-            el('button', { class: 'btn big gold', text: '첨탑에 오른다', onclick: () => { SFX.tap(); closeModal(); goMap(); } })),
-        );
-      });
-    };
-    opts.forEach((o) => {
-      const row = el('button', { class: 'choice-row' + (o.risky ? ' risky' : '') });
-      row.innerHTML = `<div class="ci">${svgIcon(o.icon, { size: 26, color: o.risky ? '#ff8a6a' : '#e8c34a' })}</div>
-        <div><b>${o.label}</b><small>${o.desc}</small></div>`;
-      row.addEventListener('click', () => take(o));
-      box.appendChild(row);
+
+  const takenIds = [];   // 이미 고른 것 (목록에서 뺀다)
+  const results = [];    // 고를 때마다 나온 문구 — 마지막에 한꺼번에 보여 준다
+
+  const showResult = () => {
+    openModal((box) => {
+      box.append(
+        modalTitle(run.charName),
+        modalText(`${results.join('\n')}\n\n1층부터 50층까지 오릅니다.\n17층과 34층의 보스를 처치하면 체력이 모두 회복됩니다.`),
+        el('div', { class: 'modal-actions' },
+          el('button', { class: 'btn big gold', text: '첨탑에 오른다', onclick: () => { SFX.tap(); closeModal(); goMap(); } })),
+      );
     });
-    // 여기 있던 '아무 표시 없는 다섯 번째 자리' 는 v1.3.17 에서 걷어냈다.
-    // 같은 일을 관리자 모드의 "자원 2배로 시작" 이 대신한다 (NEOW_SECRET 는 그대로 쓴다).
-  });
+  };
+
+  const take = async (o) => {
+    SFX.relic();
+    closeModal();
+    takenIds.push(o.id);
+    const msg = await o.apply(run, ctx);
+    results.push(msg);
+    saveRun(run);
+    if (takenIds.length < NEOW_PICKS) showList();
+    else showResult();
+  };
+
+  const showList = () => {
+    const left = NEOW_PICKS - takenIds.length;
+    openModal((box) => {
+      box.append(
+        modalTitle('시작 보너스'),
+        modalText(takenIds.length === 0
+          ? `${run.charName}(으)로 첨탑에 오릅니다.\n첫 걸음을 내딛기 전, 다섯 가지 중 ${NEOW_PICKS}가지를 고르세요.`
+          : `하나 더 고르세요. (남은 선택 ${left}개)`),
+      );
+      if (results.length) {
+        box.appendChild(el('p', { class: 'neow-got', text: `고른 것 : ${results.join(' / ')}` }));
+      }
+      opts.filter((o) => !takenIds.includes(o.id)).forEach((o) => {
+        const row = el('button', { class: 'choice-row' + (o.risky ? ' risky' : '') });
+        row.innerHTML = `<div class="ci">${svgIcon(o.icon, { size: 26, color: o.risky ? '#ff8a6a' : '#e8c34a' })}</div>
+          <div><b>${o.label}</b><small>${o.desc}</small></div>`;
+        row.addEventListener('click', () => take(o));
+        box.appendChild(row);
+      });
+      // 여기 있던 '아무 표시 없는 다섯 번째 자리' 는 v1.3.17 에서 걷어냈다.
+      // 같은 일을 관리자 모드의 "자원 2배로 시작" 이 대신한다 (NEOW_SECRET 는 그대로 쓴다).
+    });
+  };
+
+  showList();
 }
 
 const HELP_SECTIONS = [
