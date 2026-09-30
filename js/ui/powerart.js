@@ -398,6 +398,9 @@ export const POWER_ART = {
   angry:       [[bar(20, 22, 44, 34, 10) + bar(80, 22, 56, 34, 10), A], [circle(32, 56, 11) + circle(68, 56, 11), A]],
   spore:       [[`M18 56a32 32 0 0 1 64 0Z`, A], [rect(50, 70, 18, 26), A], [circle(22, 22, 7) + circle(78, 22, 7) + circle(50, 12, 6), C.poison]],
   malleable:   [[rect(50, 50, 40, 44), A], [arrow(16, 50, 26, 9, 180) + arrow(84, 50, 26, 9, 0), C.steel]],
+  // 덧없음 : 아래는 남아 있고 위로 갈수록 흩어져 사라지는 몸
+  fading:      [[poly([26, 90], [74, 90], [62, 56], [38, 56]), A],
+    [circle(50, 42, 10) + circle(60, 26, 6.5) + circle(40, 14, 4.5), A, 0.5]],
   flight:      [[arcBand(32, 62, 22, 9, -150, -20) + arcBand(72, 62, 22, 9, -160, -30), A], [rect(24, 84, 30, 8) + rect(64, 90, 26, 8), A, 0.5]],
   painfulStabs:[[blade(24, 46, 52, 18) + blade(50, 58, 52, 18) + blade(76, 46, 52, 18), A]],
   sharpHide:   [[arcBand(50, 68, 32, 15, 180, 360), A], [spikes(50, 68, 32, 17, 5, 15, 190, 160), A]],

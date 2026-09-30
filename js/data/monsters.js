@@ -609,13 +609,22 @@ M({ id: 'repulsor', name: '반발체', en: 'Repulsor', hp: [29, 35],
   },
   ai: (B, s) => (B.rng.chance(0.2) ? 'bash' : 'repulse') });
 
-M({ id: 'transient', name: '덧없는 자', en: 'Transient', hp: [999, 999],
+// 덧없는 자 — 몇 턴 버티면 스스로 사라진다. 이기는 싸움이 아니라 견디는 싸움이다.
+// v1.5.10 : 999 체력 · 30에서 10씩 오르던 공격(4턴 합계 180)은 3막 일반 전투로는 너무 무거웠다.
+//   체력 400 / 18에서 6씩(합계 108) 로 낮추고, 몇 턴 남았는지 '덧없음' 상태로 보이게 했다.
+//   예전에는 남은 턴이 s.fade 에만 있어서 화면에는 999 체력과 커지는 공격만 보였다.
+M({ id: 'transient', name: '덧없는 자', en: 'Transient', hp: [400, 400],
   shape: { body: 'ghost', color: '#6b6b8b', color2: '#d0d0f0', size: 1.6, eyes: 2, floating: true },
-  init: (B, s) => { s.fade = 5; s.atk = 30; },
+  init: (B, s) => { s.fade = 5; s.atk = 18; B.setPower(s, 'fading', 5); },
   moves: {
-    attack: { name: '공격', intent: 'attack', dyn: (s) => s.atk, run: (B, s) => { B.enemyAttack(s, s.atk); s.atk += 10; } },
+    attack: { name: '공격', intent: 'attack', dyn: (s) => s.atk, run: (B, s) => { B.enemyAttack(s, s.atk); s.atk += 6; } },
   },
-  ai: (B, s) => { s.fade--; if (s.fade <= 0) B.fleeEnemy(s); return 'attack'; } });
+  ai: (B, s) => {
+    s.fade--;
+    B.setPower(s, 'fading', s.fade);
+    if (s.fade <= 0) B.fleeEnemy(s);
+    return 'attack';
+  } });
 
 M({ id: 'theMaw', name: '아가리', en: 'The Maw', hp: [300, 300],
   shape: { body: 'maw', color: '#5a2a3a', color2: '#e05a7a', size: 2.0, eyes: 0, teeth: true },

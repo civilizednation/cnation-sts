@@ -124,6 +124,7 @@ export const POWERS = {
   angry:       { name: '성남',     en: 'Angry',       type: 'buff',   icon: 'angry',d: (n) => `공격받을 때마다 힘 ${n}을 얻습니다.` },
   spore:       { name: '포자 구름', en: 'Spore Cloud',type: 'buff',   icon: 'spore',d: (n) => `죽을 때 플레이어에게 취약 ${n}을 부여합니다.` },
   malleable:   { name: '가변성',   en: 'Malleable',   type: 'buff',   icon: 'mall', d: (n) => `공격받을 때 방어도 ${n}을 얻고, 이 수치가 증가합니다.` },
+  fading:      { name: '덧없음',   en: 'Fading',      type: 'debuff', icon: 'fade', d: (n) => `${n}턴 뒤에 사라집니다.` },
   flight:      { name: '비행',     en: 'Flight',      type: 'buff',   icon: 'flight',d:(n) => `받는 공격 피해가 절반이 됩니다. 공격받을 때마다 1 감소합니다.` },
   painfulStabs:{ name: '고통스러운 찌르기', en: 'Painful Stabs', type: 'buff', stack: 'none', icon: 'stab', d: () => `이 적의 공격은 버린 카드 더미에 상처를 넣습니다.` },
   sharpHide:   { name: '날카로운 가죽', en: 'Sharp Hide', type: 'buff', icon: 'hide', d: (n) => `공격 카드를 사용할 때마다 ${n}의 피해를 받습니다.` },
