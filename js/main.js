@@ -55,7 +55,7 @@ window.G = G;
 window.__enter = (pos) => enterRoom(pos);   // 자동 테스트용
 window.__top = () => renderTopbar(G.battle ? '#battle-top' : '#map-top');   // 자동 테스트용
 window.__fight = (ids) => startBattle({ monsters: ids, kind: 'boss' });     // 자동 테스트용
-window.__rewards = (rw, done) => showRewards(rw, done || (() => goMap()));  // 자동 테스트용
+window.__rewards = (rw, after) => showRewards(rw, after || 'map');  // 자동 테스트용
 window.__afterBoss = () => afterBoss();                                     // 자동 테스트용
 
 const SCREENS = ['scr-title', 'scr-map', 'scr-battle', 'scr-history', 'scr-codex',
@@ -214,7 +214,7 @@ function initTitle() {
     const r = loadRun();
     if (!r) { toast('저장된 게임이 없습니다.'); return; }
     G.run = r;
-    goMap();
+    resumeRun();   // 방 안에서 닫았으면 그 방을 그대로 다시 연다 (v1.5.14)
   });
   $('#btn-help').addEventListener('click', () => { unlockAudio(); SFX.tap(); showHelp(); });
   $('#btn-codex').addEventListener('click', () => { unlockAudio(); SFX.tap(); showCodex('card', 'red'); });
@@ -1376,8 +1376,51 @@ document.addEventListener('pointerdown', (e) => {
 // ============================================================
 //  지도
 // ============================================================
+/**
+ * 방 상태 저장 (v1.5.14 · 상점 되감기 막기).
+ *
+ * `run.room` 이 있으면 "이 방 화면은 그대로 다시 열 수 있다" 는 뜻이다.
+ * 방에 들어선 순간 한 번 저장하고(= 그 방의 재고·보상 목록이 확정된다),
+ * 그 뒤 **되돌리면 안 되는 일**(상점 구매·보상 받기)이 생길 때마다 다시 저장한다.
+ * 앱을 강제로 닫으면 마지막 저장으로 돌아가므로, 같은 상점에 같은 물건이 그대로 있다.
+ *
+ * 반대로 방 안에서 무언가를 **고르는 중**(강화할 카드 고르기 등)에는 저장하지 않는다.
+ * 그때 닫으면 방이 열린 순간으로 돌아가 아무 일도 없던 것이 된다 — 이득도 손해도 없다.
+ * 그래서 `visibilitychange` 는 방 안에서는 저장하지 않는다 (반쯤 적용된 상태가 남으면 안 된다).
+ */
+function beginRoom(room) {
+  G.run.room = room;
+  saveRun(G.run);
+}
+/** 방을 떠난다. goMap 이 늘 불러 주므로 보통은 따로 부를 일이 없다 */
+function endRoom() {
+  if (G.run) G.run.room = null;
+}
+
+/** 이어하기 : 방 안에서 닫았다면 그 방을 그대로 다시 연다 */
+function resumeRun() {
+  const run = G.run;
+  const rm = run && run.room;
+  if (!rm) { goMap(); return; }
+  // 방 화면은 지도 위에 모달로 뜬다 — 지도를 먼저 깔아 둔다
+  G.battle = null;
+  stopOverlayLoop();
+  BGM.play(rm.kind === 'shop' ? 'shop' : 'map');
+  showScreen('scr-map');
+  renderTopbar('#map-top');
+  renderMap();
+  if (rm.kind === 'rewards') showRewards(rm.items, rm.after, true);
+  else if (rm.kind === 'shop') showShop(true);
+  else if (rm.kind === 'event') showEvent(true);
+  else if (rm.kind === 'eventResult') showEventResult(rm.name, rm.text);
+  else if (rm.kind === 'bossRelic') afterBoss(true);
+  else if (rm.kind === 'rest') showRest();
+  else goMap();
+}
+
 function goMap() {
   G.battle = null;
+  endRoom();
   BGM.play('map');
   BGM.prefetchBattle('normal');   // 다음 전투 곡을 미리 정해 두고 받아 둔다
   stopOverlayLoop();
@@ -2386,7 +2429,7 @@ async function gainRelic(id) {
     run.upgradeRandom((c) => c.canUpgrade(), 1);
     const cards = run.cardReward('normal');
     saveRun(run);
-    showRewards([{ type: 'card', cards }], () => goMap());
+    showRewards([{ type: 'card', cards }], 'map');
     return true;
   }
   saveRun(run);
@@ -2487,34 +2530,42 @@ function endBattle(B) {
   if (kind === 'boss') { rewards[0].amount = run.goldReward('boss'); }
 
   G.battle = null;
-  showRewards(rewards, () => {
-    if (kind === 'boss') afterBoss();
-    else goMap();
-  });
+  showRewards(rewards, kind === 'boss' ? 'boss' : 'map');
 }
 
-function showRewards(rewards, done) {
-  const taken = new Set();
+/**
+ * 보상 화면. `after` 는 "계속" 을 눌렀을 때 갈 곳이다 ('map' | 'boss').
+ * 닫기 함수 대신 글자를 받는 이유는 **저장에 담아야 하기 때문**이다 (v1.5.14) —
+ * 보상 화면에서 앱을 닫으면 여기로 되돌아와야 하는데, 함수는 저장할 수 없다.
+ * `restored` 면 run.room 에 이미 목록과 받은 것이 들어 있으므로 다시 굴리지 않는다.
+ */
+function showRewards(rewards, after = 'map', restored = false) {
+  const run = G.run;
+  if (!restored) beginRoom({ kind: 'rewards', items: rewards, after, taken: [] });
+  const room = run.room;
+  const taken = new Set(room.taken || []);
   const hasPotion = rewards.some((rw) => rw.type === 'potion');
+  const finish = () => { if (room.after === 'boss') afterBoss(); else goMap(); };
+  const onTake = (i) => { room.taken = [...taken.add(i)]; saveRun(run); };
   const build = () => {
     openModal((box) => {
       box.append(modalTitle('보상'));
       const list = el('div', { style: { width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' } });
       rewards.forEach((rw, i) => {
-        const row = rewardRow(rw, i, taken, build);
+        const row = rewardRow(rw, i, taken, build, onTake);
         if (row) list.appendChild(row);
       });
       box.append(list, el('div', { class: 'modal-actions' },
-        el('button', { class: 'btn gold', text: '계속', onclick: () => { SFX.tap(); closeModal(); done(); } })));
+        el('button', { class: 'btn gold', text: '계속', onclick: () => { SFX.tap(); closeModal(); finish(); } })));
     }, { focus: hasPotion ? 'potion' : null });
   };
   build();
 }
 
-function rewardRow(rw, idx, taken, rebuild) {
+function rewardRow(rw, idx, taken, rebuild, onTake) {
   const run = G.run;
   const row = el('button', { class: 'reward-row' + (taken.has(idx) ? ' taken' : '') });
-  const take = () => { taken.add(idx); saveRun(run); renderTopbar('#map-top'); rebuild(); };
+  const take = () => { taken.add(idx); onTake(idx); renderTopbar('#map-top'); rebuild(); };
 
   if (rw.type === 'gold') {
     row.innerHTML = `<div class="relic-big" style="border-color:#e8c34a">${goldHTML(26)}</div><span>골드 ${rw.amount}</span>`;
@@ -2566,16 +2617,24 @@ function rewardRow(rw, idx, taken, rebuild) {
 
   } else return null;
 
-  if (taken.has(idx)) { row.classList.add('taken'); }
+  // 이미 받은 보상은 **버튼 자체를 잠근다** (v1.5.14).
+  // 예전에는 css 의 pointer-events 만으로 막았는데, 그건 손가락만 막을 뿐이다.
+  // 받은 표시가 저장에 남게 된 뒤로는 규칙을 css 에 기대 두면 안 된다.
+  if (taken.has(idx)) { row.classList.add('taken'); row.disabled = true; }
   return row;
 }
 
 // ---------------- 보스 클리어 ----------------
-function afterBoss() {
+/**
+ * 보스 유물 고르기. 후보를 굴리는 것도 한 번뿐이라 방에 담는다 (v1.5.14) —
+ * 아니면 원하는 보스 유물이 나올 때까지 껐다 켤 수 있다.
+ */
+function afterBoss(restored = false) {
   const run = G.run;
   if (run.act >= 3) { victory(); return; }
   // 보스 유물 선택
-  const choices = run.bossRelicChoices();
+  const choices = restored ? run.room.choices : run.bossRelicChoices();
+  if (!restored) beginRoom({ kind: 'bossRelic', choices });
   openModal((box) => {
     box.append(modalTitle('보스 유물'), modalText('하나를 선택하세요.'));
     choices.forEach((id) => {
@@ -2596,6 +2655,7 @@ function afterBoss() {
 
 function nextAct() {
   const run = G.run;
+  endRoom();              // 보스 유물은 이미 골랐다 — 방을 비우고 넘어간다
   run.advanceAct();       // 체력 전체 회복 + 다음 막 지도 생성
   SFX.heal();
   openModal((box) => {
@@ -2612,11 +2672,17 @@ function nextAct() {
 // ============================================================
 //  모닥불
 // ============================================================
+/**
+ * 모닥불. 고를 거리가 run 상태에서 그대로 나오므로 방에는 종류만 적어 둔다 —
+ * 이어하기는 이 함수를 다시 부르기만 하면 같은 목록이 나온다 (v1.5.14).
+ * 고르는 도중(강화할 카드 고르기 등)에 닫으면 모닥불이 열린 순간으로 돌아간다.
+ */
 function showRest() {
   const run = G.run;
   BGM.play('camp');
   showScreen('scr-map');
   renderMap();
+  beginRoom({ kind: 'rest' });
   const opts = [];
   if (!run.hasRelic('coffeeDripper')) opts.push({
     icon: 'flame', color: '#ff9a4a', label: '휴식',
@@ -2678,7 +2744,7 @@ function finishRest(msg) {
   saveRun(run);
   if (run.hasRelic('dreamCatcher')) {
     const cards = run.cardReward('normal');
-    showRewards([{ type: 'card', cards }], () => goMap());
+    showRewards([{ type: 'card', cards }], 'map');
   } else goMap();
 }
 
@@ -2699,17 +2765,31 @@ function showTreasure() {
   if (run.rng.chance(0.5)) items.push({ type: 'gold', amount: run.rng.range(25, 75) });
   if (run.hasRelic('cursedKey')) { run.addCurse(run.rng.pick(['clumsy', 'decay', 'doubt', 'injury', 'pain', 'regret', 'shame'])); toast('저주받은 열쇠가 저주를 불렀다!'); }
   SFX.relic();
-  showRewards(items, () => goMap());
+  showRewards(items, 'map');
 }
 
 // ============================================================
 //  상점
 // ============================================================
-function showShop() {
+/**
+ * 상점. `restored` 면 **재고를 다시 굴리지 않고** 저장해 둔 것을 그대로 쓴다 (v1.5.14) —
+ * 이게 없으면 원하는 물건이 나올 때까지 앱을 껐다 켜는 되감기가 통한다.
+ * `onEnterShop`(밥값 티켓 회복 등)도 다시 부르지 않는다.
+ */
+function showShop(restored = false) {
   const run = G.run;
   BGM.play('shop');
   showScreen('scr-map');
   renderMap();
+
+  let cardItems, relicItems, potionItems, removalPrice;
+  if (restored) {
+    const rm = run.room;
+    cardItems = rm.cards; relicItems = rm.relics; potionItems = rm.potions; removalPrice = rm.removalPrice;
+    buildShop();
+    return;
+  }
+
   run.relicHook('onEnterShop', run);
   const discount = run.hasRelic('theCourier') ? 0.8 : 1;
 
@@ -2724,20 +2804,20 @@ function showShop() {
     if (c) cards.push(c);
   }
   const basePrice = { basic: 50, common: 50, uncommon: 75, rare: 150, special: 90, curse: 50 };
-  const cardItems = cards.map((c) => ({ card: c, price: Math.round(basePrice[c.rarity] * (c.color === 'colorless' ? 1.2 : 1) * discount * run.rng.range(9, 11) / 10) }));
+  cardItems = cards.map((c) => ({ card: c, price: Math.round(basePrice[c.rarity] * (c.color === 'colorless' ? 1.2 : 1) * discount * run.rng.range(9, 11) / 10) }));
 
-  const relicItems = [];
+  relicItems = [];
   for (let i = 0; i < 3; i++) {
     const rar = i === 0 ? 'common' : i === 1 ? 'uncommon' : 'rare';
     const id = run.pickRelic(rar);
     if (id && !relicItems.some((r) => r.id === id)) relicItems.push({ id, price: Math.round({ common: 150, uncommon: 250, rare: 300, boss: 300, shop: 150 }[RELICS[id].rarity] * discount) });
   }
-  const potionItems = [];
+  potionItems = [];
   for (let i = 0; i < 3; i++) {
     const id = run.randomPotion();
     potionItems.push({ id, price: Math.round({ common: 50, uncommon: 75, rare: 100 }[POTIONS[id].rarity] * discount) });
   }
-  const removalPrice = run.hasRelic('smilingMask') ? 50 : 75 + (run.flags.removals || 0) * 25;
+  removalPrice = run.hasRelic('smilingMask') ? 50 : 75 + (run.flags.removals || 0) * 25;
 
   // 무작위 상품 1개 할인 (반값 또는 80% 할인)
   const allItems = [...cardItems, ...relicItems, ...potionItems];
@@ -2750,7 +2830,12 @@ function showShop() {
     sale.saleLabel = rate === 0.5 ? '반값' : '80% 할인';
   }
 
-  const rebuild = () => {
+  // 재고가 확정됐다 — 여기서 한 번 저장해 둔다. 이 뒤로는 사고 나갈 때만 다시 저장한다.
+  beginRoom({ kind: 'shop', cards: cardItems, relics: relicItems, potions: potionItems, removalPrice });
+  buildShop();
+
+  function buildShop() {
+    const rebuild = buildShop;
     openModal((box) => {
       box.append(modalTitle('상점'), el('p', { class: 'modal-text', text: `보유 골드 : ${run.gold}G` }));
       // 카드
@@ -2766,6 +2851,7 @@ function showShop() {
         wrap.addEventListener('click', () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           run.spendGold(it.price); run.addCard(it.card); it.sold = true;
+          saveRun(run);   // 산 것은 되돌리지 않는다 (v1.5.14)
           SFX.gold(); toast(`${it.card.name} 구매!`); rebuild();
         });
         grid.appendChild(wrap);
@@ -2781,6 +2867,7 @@ function showShop() {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           run.spendGold(it.price); it.sold = true;
           await gainRelic(it.id);
+          saveRun(run);
           rebuild();
         });
         box.appendChild(row);
@@ -2793,7 +2880,7 @@ function showShop() {
         row.addEventListener('click', () => {
           if (run.gold < it.price) { toast('골드가 부족합니다.'); return; }
           takePotion(it.id, (ok) => {
-            if (ok) { run.spendGold(it.price); it.sold = true; }
+            if (ok) { run.spendGold(it.price); it.sold = true; saveRun(run); }
             rebuild();
           });
         });
@@ -2811,6 +2898,7 @@ function showShop() {
             run.spendGold(removalPrice); run.removeCard(c);
             run.flags.removals = (run.flags.removals || 0) + 1;
             run.flags.shopRemoved = true;
+            saveRun(run);
             SFX.exhaust();
             toast(`${c.name} 제거됨.`);
           }
@@ -2819,21 +2907,28 @@ function showShop() {
         box.appendChild(row);
       }
       box.append(el('div', { class: 'modal-actions' },
-        el('button', { class: 'btn', text: '나가기', onclick: () => { SFX.tap(); run.flags.shopRemoved = false; closeModal(); saveRun(run); goMap(); } })));
+        el('button', { class: 'btn', text: '나가기', onclick: () => { SFX.tap(); run.flags.shopRemoved = false; closeModal(); goMap(); } })));
     }, { focus: 'potion' });
-  };
-  rebuild();
+  }
 }
 
 // ============================================================
 //  이벤트
 // ============================================================
-function showEvent() {
+/**
+ * ? 이벤트. `restored` 면 **다시 뽑지 않고** 저장해 둔 그 이벤트를 연다 (v1.5.14) —
+ * 다시 뽑으면 마음에 드는 이벤트가 나올 때까지 껐다 켜는 되감기가 통한다.
+ * 선택지를 고른 뒤에는 방이 'eventResult' 로 바뀌므로, 그때 닫으면
+ * 결과 화면으로 돌아올 뿐 선택을 다시 하지는 못한다.
+ */
+function showEvent(restored = false) {
   const run = G.run;
   BGM.play('camp');
   showScreen('scr-map');
   renderMap();
-  const ev = pickEvent(run);
+  const ev = restored ? EVENTS[run.room.id] : pickEvent(run);
+  if (!ev) { goMap(); return; }
+  if (!restored) beginRoom({ kind: 'event', id: ev.id });
   const ctx = {
     pickCard: async (filter, title) => {
       const cand = run.deck.filter(filter);
@@ -2869,15 +2964,21 @@ function showEvent() {
         row.disabled = true;
         const res = await o.effect(run, ctx);
         if (res === 'battle' || !res) return;
-        saveRun(run);
-        openModal((b2) => {
-          b2.append(modalTitle(ev.name), modalText(res),
-            el('div', { class: 'modal-actions' },
-              el('button', { class: 'btn gold', text: '계속', onclick: () => { closeModal(); goMap(); } })));
-        }, { focus: 'hp' });
+        // 고른 뒤에는 되돌릴 수 없다 — 결과 화면으로 방을 바꿔 저장한다
+        beginRoom({ kind: 'eventResult', name: ev.name, text: res });
+        showEventResult(ev.name, res);
       });
       box.appendChild(row);
     });
+  }, { focus: 'hp' });
+}
+
+/** 이벤트 선택 결과 화면 (이어하기로도 여기로 돌아온다) */
+function showEventResult(name, text) {
+  openModal((b2) => {
+    b2.append(modalTitle(name), modalText(text),
+      el('div', { class: 'modal-actions' },
+        el('button', { class: 'btn gold', text: '계속', onclick: () => { closeModal(); goMap(); } })));
   }, { focus: 'hp' });
 }
 
@@ -3134,6 +3235,7 @@ async function adminStartRun(charId, floor) {
     const ctx = { gainRelic: async (id) => gainRelic(id), relicName: (id) => (RELICS[id] ? RELICS[id].name : '유물') };
     try { await NEOW_SECRET.apply(run, ctx); } catch (e) { console.warn('자원 2배 적용 실패', e); }
   }
+  endRoom();
   saveRun(run);
   closeModal();
   toast(`${run.charName} · ${run.floor}층부터 (전적에 남지 않습니다)`);
@@ -3581,7 +3683,9 @@ function bind() {
   addEventListener('visibilitychange', () => {
     // 전투 중에는 저장하지 않는다 (v1.5.8). 저장하면 "이 방에 이미 들어갔다" 는 상태가 남아
     // 앱을 강제로 닫았을 때 그 전투가 건너뛰어진다. 저장해 둔 것은 방에 들어가기 전 상태다.
-    if (document.hidden && G.run && !G.battle) saveRun(G.run);
+    // 전투 중에는 저장하지 않고(v1.5.8), 방 안에서도 저장하지 않는다(v1.5.14).
+    // 방은 들어설 때와 되돌리면 안 되는 일이 생길 때만 저장한다 — beginRoom 주석 참고.
+    if (document.hidden && G.run && !G.battle && !G.run.room) saveRun(G.run);
   });
 }
 

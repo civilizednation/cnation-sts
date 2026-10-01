@@ -48,6 +48,32 @@ export const ROOM_KR = {
   shop: '상점', treasure: '보물', boss: '보스',
 };
 
+/**
+ * 진행 중인 방 상태의 저장 꼴 (v1.5.14).
+ * 카드만 객체라 따로 풀었다 넣는다 — 나머지(유물 id·골드·가격·판매 여부)는 그대로 담긴다.
+ * 새 방 종류를 더할 때 카드를 담는다면 여기에도 한 줄 보탤 것.
+ */
+function roomToJSON(room) {
+  if (!room) return null;
+  const o = { ...room };
+  if (room.kind === 'rewards') {
+    o.items = room.items.map((it) => (it.type === 'card' ? { ...it, cards: it.cards.map((c) => c.toJSON()) } : { ...it }));
+  } else if (room.kind === 'shop') {
+    o.cards = room.cards.map((it) => ({ ...it, card: it.card.toJSON() }));
+  }
+  return o;
+}
+function roomFromJSON(o) {
+  if (!o || !o.kind) return null;
+  const room = { ...o };
+  if (o.kind === 'rewards') {
+    room.items = (o.items || []).map((it) => (it.type === 'card' ? { ...it, cards: (it.cards || []).map((c) => Card.fromJSON(c)) } : { ...it }));
+  } else if (o.kind === 'shop') {
+    room.cards = (o.cards || []).map((it) => ({ ...it, card: Card.fromJSON(it.card) }));
+  }
+  return room;
+}
+
 /** 캐릭터별 시작 덱 */
 function starterDeck(ch) {
   const d = [];
@@ -86,6 +112,11 @@ export class Run {
     // 시작 보너스 화면의 숨겨진 선택지 — 최대 체력·공격·방어·물약 효과가 2배
     this.cheat = false;
     this.usedEvents = [];
+    // 지금 들어가 있는 방의 상태 (v1.5.14). 상점 재고·보상 목록처럼 **한 번 굴린 뒤
+    // 다시 굴리면 안 되는 것**을 여기에 담아 저장한다 — 앱을 강제로 닫아도 그 방이
+    // 그대로 복원되므로, 원하는 물건이 나올 때까지 껐다 켜는 되감기가 막힌다.
+    // 지도에 서 있을 때는 null 이다. 전투만 예외로 여기 담지 않는다 (Battle 은 직렬화하지 않는다).
+    this.room = null;
     this.stats = { kills: 0, elites: 0, bosses: 0, damageTaken: 0, floorsClimbed: 0 };
     this.buildAct(1);
   }
@@ -435,6 +466,11 @@ export class Run {
       potionChance: this.potionChance, bossEncounter: this.bossEncounter,
       usedEvents: this.usedEvents, unknownChance: this.unknownChance, cheat: this.cheat,
       startedAt: this.startedAt, journal: this.journal,
+      // 조우 주머니 (v1.5.14). 예전에는 담지 않아서 불러올 때 다시 섞었는데,
+      // 그 바람에 ① 난수 위치가 어긋나 같은 방이 다른 전투가 되고
+      // ② 주머니가 가득 다시 채워져 이미 치른 조합이 되살아났다.
+      monsterQueue: this.monsterQueue, strongQueue: this.strongQueue, eliteQueue: this.eliteQueue,
+      room: roomToJSON(this.room),
     };
   }
 
@@ -458,9 +494,16 @@ export class Run {
     r.cheat = !!o.cheat;
     r.startedAt = o.startedAt || Date.now();
     r.journal = Array.isArray(o.journal) ? o.journal : [];   // 1.3.14 이전 저장에는 없다
-    r.monsterQueue = r.rng.shuffle(ENCOUNTERS[r.act].weak.slice());
-    r.strongQueue = r.rng.shuffle(ENCOUNTERS[r.act].strong.slice());
-    r.eliteQueue = r.rng.shuffle(ENCOUNTERS[r.act].elite.slice());
+    // 조우 주머니는 그대로 되살린다. 없는 저장(1.5.13 이전)만 새로 섞는다 —
+    // 이때는 난수가 세 번 움직이지만, 어차피 그 저장에는 맞출 기준이 없다.
+    if (o.monsterQueue && o.strongQueue && o.eliteQueue) {
+      r.monsterQueue = o.monsterQueue; r.strongQueue = o.strongQueue; r.eliteQueue = o.eliteQueue;
+    } else {
+      r.monsterQueue = r.rng.shuffle(ENCOUNTERS[r.act].weak.slice());
+      r.strongQueue = r.rng.shuffle(ENCOUNTERS[r.act].strong.slice());
+      r.eliteQueue = r.rng.shuffle(ENCOUNTERS[r.act].elite.slice());
+    }
+    r.room = roomFromJSON(o.room);
     return r;
   }
 }
