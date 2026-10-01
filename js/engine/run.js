@@ -18,6 +18,17 @@ export const ACT_RANGES = [
   { act: 3, start: 35, rows: 15, boss: 50 },
 ];
 
+/**
+ * 1막 초반 몸풀기 보정 (v1.5.12 · 전투 번호 → 배율).
+ * hp 는 적의 최대 체력에, dmg 는 **적이 주는 피해에만** 곱한다 —
+ * 내가 주는 피해는 그대로라, 체력이 깎인 적은 그만큼 빨리 죽는다.
+ * 3번째 전투부터는 정가다. 여기에 줄을 더하면 경사로가 그만큼 길어진다.
+ */
+export const NEW_RUN_TUNING = {
+  1: { hp: 0.55, dmg: 0.5, label: '아주 약함' },
+  2: { hp: 0.75, dmg: 0.7, label: '약함' },
+};
+
 export const ROOM = {
   MONSTER: 'monster', ELITE: 'elite', EVENT: 'event',
   REST: 'rest', SHOP: 'shop', TREASURE: 'treasure', BOSS: 'boss',
@@ -283,11 +294,12 @@ export class Run {
     this.monsterCount++;
     const weakCount = this.act === 1 ? 3 : 2;
     let list;
-    let tuning = null;
-    // 1막 초반 2번의 전투는 몸풀기용으로 약하게 조정한다
+    // 1막 초반 두 전투는 몸풀기용으로 약하게 한다 — 두 계단에 걸쳐 정가로 올라간다.
+    // tuning 은 몬스터 자료를 고치는 것이 아니라 그 한 전투에만 걸리는 배율이다
+    // (battle.js 의 addEnemy 가 체력에, attackValue 가 적이 주는 피해에만 곱한다).
+    const tuning = this.act === 1 ? NEW_RUN_TUNING[this.monsterCount] || null : null;
     if (this.act === 1 && this.monsterCount === 1) {
       list = this.rng.pick(OPENING_ENCOUNTERS);
-      tuning = { hp: 0.75, dmg: 0.7, label: '약함' };
     } else if (this.monsterCount <= weakCount) {
       if (!this.monsterQueue.length) this.monsterQueue = this.rng.shuffle(ENCOUNTERS[this.act].weak.slice());
       list = this.monsterQueue.pop();
