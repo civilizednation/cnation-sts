@@ -19,14 +19,23 @@ export const ACT_RANGES = [
 ];
 
 /**
- * 1막 초반 몸풀기 보정 (v1.5.12 · 전투 번호 → 배율).
+ * 막 초반 몸풀기 보정 (v1.5.13 · 막 → 그 막의 몇 번째 일반 전투 → 배율).
  * hp 는 적의 최대 체력에, dmg 는 **적이 주는 피해에만** 곱한다 —
  * 내가 주는 피해는 그대로라, 체력이 깎인 적은 그만큼 빨리 죽는다.
- * 3번째 전투부터는 정가다. 여기에 줄을 더하면 경사로가 그만큼 길어진다.
+ * 표에 없는 전투는 정가다. 줄을 더하면 그 막의 경사로가 그만큼 길어진다.
+ *
+ * 1막은 게임을 막 배우는 자리라 두 계단으로 길게 깔고,
+ * 2·3막은 보스를 막 넘어온 첫 판 하나만 반으로 줄인다.
+ * 세는 기준은 `monsterCount` 로, 막마다 0 에서 다시 시작하고
+ * 엘리트·보스는 세지 않는다 (몸풀기가 걸리지 않는다는 뜻이다).
  */
-export const NEW_RUN_TUNING = {
-  1: { hp: 0.55, dmg: 0.5, label: '아주 약함' },
-  2: { hp: 0.75, dmg: 0.7, label: '약함' },
+export const ACT_RAMP = {
+  1: {
+    1: { hp: 0.55, dmg: 0.5, label: '아주 약함' },
+    2: { hp: 0.75, dmg: 0.7, label: '약함' },
+  },
+  2: { 1: { hp: 0.5, dmg: 0.5, label: '약함' } },
+  3: { 1: { hp: 0.5, dmg: 0.5, label: '약함' } },
 };
 
 export const ROOM = {
@@ -294,10 +303,10 @@ export class Run {
     this.monsterCount++;
     const weakCount = this.act === 1 ? 3 : 2;
     let list;
-    // 1막 초반 두 전투는 몸풀기용으로 약하게 한다 — 두 계단에 걸쳐 정가로 올라간다.
+    // 막 초반 몇 전투는 몸풀기용으로 약하게 한다 (ACT_RAMP).
     // tuning 은 몬스터 자료를 고치는 것이 아니라 그 한 전투에만 걸리는 배율이다
     // (battle.js 의 addEnemy 가 체력에, attackValue 가 적이 주는 피해에만 곱한다).
-    const tuning = this.act === 1 ? NEW_RUN_TUNING[this.monsterCount] || null : null;
+    const tuning = (ACT_RAMP[this.act] || {})[this.monsterCount] || null;
     if (this.act === 1 && this.monsterCount === 1) {
       list = this.rng.pick(OPENING_ENCOUNTERS);
     } else if (this.monsterCount <= weakCount) {
